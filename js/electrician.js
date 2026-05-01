@@ -8,7 +8,6 @@ let electricianProfile = null;
 let pendingJobs = [];
 let activeJobs = [];
 let activeTab = 'available';
-let apiBusyCount = 0;
 
 document.addEventListener('DOMContentLoaded', initElectricianDashboard);
 
@@ -29,7 +28,9 @@ async function initElectricianDashboard() {
 
 function bindEvents() {
   document.getElementById('logoutBtn').addEventListener('click', logout);
-  document.getElementById('availabilityToggle').addEventListener('change', handleAvailabilityToggle);
+  getAvailabilityToggles().forEach((toggle) => {
+    toggle.addEventListener('change', handleAvailabilityToggle);
+  });
   document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
   document.getElementById('modalOverlay').addEventListener('click', (event) => {
     if (event.target.id === 'modalOverlay') {
@@ -68,41 +69,17 @@ function setActiveTab(tab) {
   }
 }
 
-// API boundary: protected electrician actions always go through the orchestrator.
-function beginApi(message) {
-  apiBusyCount += 1;
-  showSpinner(message);
-}
-
-function endApi() {
-  apiBusyCount = Math.max(0, apiBusyCount - 1);
-
-  if (apiBusyCount === 0) {
-    hideSpinner();
-  }
-}
-
 async function requestJson(path, options, loadingMessage) {
-  beginApi(loadingMessage || 'Loading...');
-
-  try {
-    const response = await fetch(apiUrl(path), options);
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      const error = new Error('API request failed');
-      error.userMessage = getSafeErrorMessage(data);
-      throw error;
-    }
-
-    return data;
-  } finally {
-    endApi();
-  }
+  return requestApi(path, options, loadingMessage || 'Loading...');
 }
 
 function showRequestError(error) {
-  showToast(error.userMessage || 'Something went wrong. Please try again.', 'error');
+  if (error && error.status === 401) {
+    handleSessionExpired();
+    return;
+  }
+
+  showToast((error && error.userMessage) || 'Something went wrong. Please try again', 'error');
 }
 
 // Data loading is split by workflow so each tab can refresh independently.
@@ -171,7 +148,7 @@ function renderAvailableJobs() {
   const grid = document.getElementById('availableJobsGrid');
 
   if (!pendingJobs.length) {
-    grid.innerHTML = emptyState('No available jobs right now', 'Pending and AI-matched jobs will appear here.');
+    grid.innerHTML = emptyState('No available jobs right now', 'Pending and AI-matched jobs will appear here.', 'jobs');
     return;
   }
 
@@ -186,7 +163,7 @@ function renderActiveJobs() {
   const list = document.getElementById('activeJobsList');
 
   if (!activeJobs.length) {
-    list.innerHTML = emptyState('No active jobs yet', 'Accepted jobs will appear here.');
+    list.innerHTML = emptyState('No active jobs yet', 'Accepted jobs will appear here.', 'jobs');
     return;
   }
 
@@ -214,7 +191,7 @@ function availableJobCardHtml(job) {
     job.ai_issue_type ? '    <span class="badge badge-soft">' + escapeHtml(job.ai_issue_type) + '</span>' : '',
     job.ai_severity ? '    <span class="badge badge-severity-' + severity + '">' + escapeHtml(toTitleCase(severity)) + '</span>' : '',
     '  </div>',
-    '  <p class="muted">' + escapeHtml(relativeTime(job.created_at)) + '</p>',
+    '  <p class="muted">' + escapeHtml(formatRelativeTime(job.created_at)) + '</p>',
     '  <p class="muted line-clamp">' + escapeHtml(job.ai_explanation || job.description || 'No AI explanation available yet.') + '</p>',
     '  <div class="tag-list">' + getSuggestedSkills(job).map(skillTagHtml).join('') + '</div>',
     '  <div class="card-actions">',
@@ -258,7 +235,9 @@ function activeJobCardHtml(job) {
 async function handleAvailabilityToggle(event) {
   const toggle = event.target;
   const nextAvailable = toggle.checked;
-  toggle.disabled = true;
+  getAvailabilityToggles().forEach((item) => {
+    item.disabled = true;
+  });
 
   try {
     await requestJson('/api/users/' + encodeURIComponent(getUserId()), {
@@ -273,12 +252,14 @@ async function handleAvailabilityToggle(event) {
     updateAvailabilityUI(!nextAvailable);
     showRequestError(error);
   } finally {
-    toggle.disabled = false;
+    getAvailabilityToggles().forEach((item) => {
+      item.disabled = false;
+    });
   }
 }
 
 async function acceptJob(jobId, button) {
-  button.disabled = true;
+  setButtonLoading(button, true, 'Accepting');
 
   try {
     await requestJson('/api/jobs/' + encodeURIComponent(jobId) + '/status', {
@@ -297,12 +278,12 @@ async function acceptJob(jobId, button) {
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
 async function rejectJob(jobId, button) {
-  button.disabled = true;
+  setButtonLoading(button, true, 'Rejecting');
 
   try {
     await requestJson('/api/jobs/' + encodeURIComponent(jobId) + '/status', {
@@ -318,12 +299,12 @@ async function rejectJob(jobId, button) {
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
 async function markJobComplete(jobId, button) {
-  button.disabled = true;
+  setButtonLoading(button, true, 'Completing');
 
   try {
     await requestJson('/api/jobs/' + encodeURIComponent(jobId) + '/complete', {
@@ -338,13 +319,26 @@ async function markJobComplete(jobId, button) {
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
 function updateAvailabilityUI(isAvailable) {
-  document.getElementById('availabilityToggle').checked = Boolean(isAvailable);
-  document.getElementById('availabilityLabel').textContent = isAvailable ? 'Available' : 'Unavailable';
+  getAvailabilityToggles().forEach((toggle) => {
+    toggle.checked = Boolean(isAvailable);
+  });
+
+  getAvailabilityLabels().forEach((label) => {
+    label.textContent = isAvailable ? 'Available' : 'Unavailable';
+  });
+}
+
+function getAvailabilityToggles() {
+  return Array.from(document.querySelectorAll('#availabilityToggle, #availabilityToggleMobile'));
+}
+
+function getAvailabilityLabels() {
+  return Array.from(document.querySelectorAll('#availabilityLabel, #availabilityLabelMobile'));
 }
 
 // Modal composition keeps high-detail job review separate from card rendering.
@@ -430,48 +424,6 @@ function skillTagHtml(skill) {
 
 function detailRow(label, value, valueIsHtml) {
   return '<div class="detail-row"><strong>' + escapeHtml(label) + '</strong><span>' + (valueIsHtml ? value : escapeHtml(value)) + '</span></div>';
-}
-
-function emptyState(title, message) {
-  return [
-    '<div class="card empty-state">',
-    '  <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg></div>',
-    '  <h3>' + escapeHtml(title) + '</h3>',
-    '  <p>' + escapeHtml(message) + '</p>',
-    '</div>'
-  ].join('');
-}
-
-function relativeTime(value) {
-  if (!value) {
-    return 'Recently';
-  }
-
-  const date = new Date(value);
-  const diffMs = Date.now() - date.getTime();
-
-  if (Number.isNaN(diffMs)) {
-    return 'Recently';
-  }
-
-  const minutes = Math.max(0, Math.round(diffMs / 60000));
-
-  if (minutes < 1) {
-    return 'Just now';
-  }
-
-  if (minutes < 60) {
-    return minutes + ' minute' + (minutes === 1 ? '' : 's') + ' ago';
-  }
-
-  const hours = Math.round(minutes / 60);
-
-  if (hours < 24) {
-    return hours + ' hour' + (hours === 1 ? '' : 's') + ' ago';
-  }
-
-  const days = Math.round(hours / 24);
-  return days + ' day' + (days === 1 ? '' : 's') + ' ago';
 }
 
 function toTitleCase(value) {

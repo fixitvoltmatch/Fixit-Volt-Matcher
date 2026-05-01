@@ -16,6 +16,14 @@
         <h1 id="chatTitle">Loading chat...</h1>
         <span class="badge badge-status-pending" id="chatStatus">Pending</span>
       </div>
+      <button class="mobile-menu-toggle" type="button" aria-label="Open navigation menu" aria-controls="chatMobileMenu" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <div class="mobile-menu" id="chatMobileMenu" aria-hidden="true">
+        <button class="mobile-menu-link" type="button" data-mobile-back="true">Back</button>
+      </div>
     </header>
 
     <main class="messages-area" id="messagesArea" aria-live="polite"></main>

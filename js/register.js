@@ -28,6 +28,10 @@ function initRegistrationPage() {
   registerForm.addEventListener('submit', handleRegister);
   otpForm.addEventListener('submit', handleVerifyOtp);
   resendCodeBtn.addEventListener('click', handleResendCode);
+
+  Array.from(document.querySelectorAll('#registerForm input, #registerForm textarea, #otpForm input')).forEach((input) => {
+    input.addEventListener('input', () => clearFieldError(input));
+  });
 }
 
 function setRole(role) {
@@ -50,29 +54,17 @@ function collectSelectedSkills() {
 }
 
 function buildRegistrationPayload() {
+  if (!validateRegistrationForm()) {
+    return null;
+  }
+
   const email = getTrimmedValue('email').toLowerCase();
   const password = document.getElementById('password').value;
-  const confirmPassword = document.getElementById('confirmPassword').value;
   const fullName = getTrimmedValue('fullName');
   const city = getTrimmedValue('city');
   const phone = getTrimmedValue('phone');
   const bio = getTrimmedValue('bio');
   const experienceYears = Number(document.getElementById('experienceYears').value || 0);
-
-  if (!fullName || !email || !password || !confirmPassword || !city || !phone) {
-    showToast('Please fill in all required fields.', 'error');
-    return null;
-  }
-
-  if (password.length < 8) {
-    showToast('Password must be at least 8 characters.', 'error');
-    return null;
-  }
-
-  if (password !== confirmPassword) {
-    showToast('Passwords do not match.', 'error');
-    return null;
-  }
 
   const payload = {
     email,
@@ -92,6 +84,26 @@ function buildRegistrationPayload() {
   return payload;
 }
 
+function validateRegistrationForm() {
+  const fullNameField = document.getElementById('fullName');
+  const emailField = document.getElementById('email');
+  const phoneField = document.getElementById('phone');
+  const passwordField = document.getElementById('password');
+  const confirmField = document.getElementById('confirmPassword');
+  const cityField = document.getElementById('city');
+
+  const checks = [
+    validateRequiredField(fullNameField, 'Full name is required.'),
+    validateEmailField(emailField),
+    validatePhoneField(phoneField),
+    validatePasswordField(passwordField),
+    validatePasswordMatchField(passwordField, confirmField),
+    validateRequiredField(cityField, 'City is required.')
+  ];
+
+  return checks.every(Boolean);
+}
+
 function setFormDisabled(form, isDisabled) {
   Array.from(form.querySelectorAll('button, input, textarea')).forEach((element) => {
     element.disabled = isDisabled;
@@ -103,25 +115,19 @@ async function handleRegister(event) {
   event.preventDefault();
 
   const payload = buildRegistrationPayload();
+  const button = document.getElementById('createAccountBtn');
   if (!payload) {
     return;
   }
 
-  setFormDisabled(registerForm, true);
-  showSpinner('Creating your account...');
+  setButtonLoading(button, true, 'Creating');
 
   try {
-    const response = await fetch(apiUrl('/api/auth/register'), {
+    const data = await requestApi('/api/auth/register', {
       method: 'POST',
       headers: getPublicHeaders(),
       body: JSON.stringify(payload)
-    });
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      showToast(getSafeErrorMessage(data), 'error');
-      return;
-    }
+    }, 'Creating your account...');
 
     pendingRegistration = payload;
     pendingUserId = data.userId || '';
@@ -130,10 +136,9 @@ async function handleRegister(event) {
     document.getElementById('otpCode').focus();
     showToast('Check your email for the verification code.', 'success');
   } catch (error) {
-    showToast('Something went wrong. Please try again.', 'error');
+    showRequestError(error);
   } finally {
-    hideSpinner();
-    setFormDisabled(registerForm, false);
+    setButtonLoading(button, false);
   }
 }
 
@@ -147,15 +152,14 @@ async function handleVerifyOtp(event) {
 
   const otpValue = getTrimmedValue('otpCode').replace(/\D/g, '');
   if (!/^\d{8}$/.test(otpValue)) {
-    showToast('Enter the 8 digit code from your email.', 'error');
+    setFieldError(document.getElementById('otpCode'), 'Enter the 8 digit code from your email.');
     return;
   }
 
-  setFormDisabled(otpForm, true);
-  showSpinner('Verifying your email...');
+  setButtonLoading(document.getElementById('verifyOtpBtn'), true, 'Verifying');
 
   try {
-    const response = await fetch(apiUrl('/api/auth/verify-otp'), {
+    const data = await requestApi('/api/auth/verify-otp', {
       method: 'POST',
       headers: getPublicHeaders(),
       body: JSON.stringify({
@@ -163,13 +167,7 @@ async function handleVerifyOtp(event) {
         token: otpValue,
         ...pendingRegistration
       })
-    });
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      showToast(getSafeErrorMessage(data, 'Invalid or expired code.'), 'error');
-      return;
-    }
+    }, 'Verifying your email...');
 
     localStorage.setItem('accessToken', data.accessToken || '');
     localStorage.setItem('userId', data.userId || pendingUserId);
@@ -177,10 +175,9 @@ async function handleVerifyOtp(event) {
     showToast('Welcome to Fixit Volt Matcher!', 'success');
     window.setTimeout(redirectBasedOnRole, 500);
   } catch (error) {
-    showToast('Something went wrong. Please try again.', 'error');
+    showRequestError(error);
   } finally {
-    hideSpinner();
-    setFormDisabled(otpForm, false);
+    setButtonLoading(document.getElementById('verifyOtpBtn'), false);
   }
 }
 
@@ -190,28 +187,20 @@ async function handleResendCode() {
     return;
   }
 
-  resendCodeBtn.disabled = true;
-  showSpinner('Requesting a new code...');
+  setButtonLoading(resendCodeBtn, true, 'Sending');
 
   try {
-    const response = await fetch(apiUrl('/api/auth/register'), {
+    await requestApi('/api/auth/register', {
       method: 'POST',
       headers: getPublicHeaders(),
       body: JSON.stringify(pendingRegistration)
-    });
+    }, 'Requesting a new code...');
 
-    await parseApiResponse(response);
-
-    if (response.ok) {
-      showToast('We sent a new code to your email.', 'success');
-    } else {
-      showToast('Please check your inbox or try again soon.', 'error');
-    }
+    showToast('We sent a new code to your email.', 'success');
   } catch (error) {
-    showToast('Something went wrong. Please try again.', 'error');
+    showRequestError(error);
   } finally {
-    hideSpinner();
-    resendCodeBtn.disabled = false;
+    setButtonLoading(resendCodeBtn, false);
   }
 }
 

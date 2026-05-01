@@ -21,6 +21,10 @@ function initLoginPage() {
   loginForm.addEventListener('submit', handleLogin);
   forgotForm.addEventListener('submit', handleForgotPassword);
   forgotToggleBtn.addEventListener('click', toggleForgotPanel);
+
+  Array.from(document.querySelectorAll('#loginForm input, #forgotForm input')).forEach((input) => {
+    input.addEventListener('input', () => clearFieldError(input));
+  });
 }
 
 function getLoginEmail() {
@@ -46,29 +50,25 @@ function toggleForgotPanel() {
 async function handleLogin(event) {
   event.preventDefault();
 
+  const emailField = document.getElementById('email');
+  const passwordField = document.getElementById('password');
   const email = getLoginEmail();
-  const password = document.getElementById('password').value;
+  const password = passwordField.value;
+  const button = document.getElementById('loginBtn');
+  const isValid = validateEmailField(emailField) && validatePasswordField(passwordField);
 
-  if (!email || !password) {
-    showToast('Please enter your email and password.', 'error');
+  if (!isValid) {
     return;
   }
 
-  setFormDisabled(loginForm, true);
-  showSpinner('Logging in...');
+  setButtonLoading(button, true, 'Logging in');
 
   try {
-    const response = await fetch(apiUrl('/api/auth/login'), {
+    const data = await requestApi('/api/auth/login', {
       method: 'POST',
       headers: getPublicHeaders(),
       body: JSON.stringify({ email, password })
-    });
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      showToast('Invalid email or password', 'error');
-      return;
-    }
+    }, 'Logging in...');
 
     localStorage.setItem('accessToken', data.accessToken || '');
     localStorage.setItem('userId', data.userId || '');
@@ -83,39 +83,47 @@ async function handleLogin(event) {
     showToast('Welcome back!', 'success');
     window.setTimeout(redirectBasedOnRole, 450);
   } catch (error) {
-    showToast('Something went wrong. Please try again.', 'error');
+    if (error.status && error.status !== 401 && error.status < 500 && !error.isNetworkError) {
+      showToast('Invalid email or password', 'error');
+    } else {
+      showRequestError(error);
+    }
   } finally {
-    hideSpinner();
-    setFormDisabled(loginForm, false);
+    setButtonLoading(button, false);
   }
 }
 
 async function handleForgotPassword(event) {
   event.preventDefault();
 
-  const email = document.getElementById('forgotEmail').value.trim() || getLoginEmail();
+  const emailField = document.getElementById('forgotEmail');
+  const button = document.getElementById('sendResetBtn');
+  const email = emailField.value.trim() || getLoginEmail();
 
   if (!email) {
-    showToast('Enter your email address first.', 'error');
+    setFieldError(emailField, 'Enter your email address first.');
     return;
   }
 
-  setFormDisabled(forgotForm, true);
-  showSpinner('Sending reset link...');
+  emailField.value = email;
+  if (!validateEmailField(emailField)) {
+    return;
+  }
+
+  setButtonLoading(button, true, 'Sending');
 
   try {
-    await fetch(apiUrl('/api/auth/forgot-password'), {
+    await requestApi('/api/auth/forgot-password', {
       method: 'POST',
       headers: getPublicHeaders(),
       body: JSON.stringify({ email })
-    });
+    }, 'Sending reset link...');
 
     showToast('If that email exists we sent a reset link', 'success');
   } catch (error) {
-    showToast('If that email exists we sent a reset link', 'success');
+    showRequestError(error);
   } finally {
-    hideSpinner();
-    setFormDisabled(forgotForm, false);
+    setButtonLoading(button, false);
   }
 }
 

@@ -13,7 +13,6 @@ let electricianCache = [];
 let customerJobs = [];
 let lastCreatedJob = null;
 let lastMatches = [];
-let apiBusyCount = 0;
 
 document.addEventListener('DOMContentLoaded', initCustomerDashboard);
 
@@ -35,11 +34,12 @@ async function initCustomerDashboard() {
 
 function bindEvents() {
   document.getElementById('logoutBtn').addEventListener('click', logout);
-  document.getElementById('searchElectriciansBtn').addEventListener('click', () => loadElectricians());
+  document.getElementById('searchElectriciansBtn').addEventListener('click', (event) => loadElectricians(event.currentTarget));
   document.getElementById('getAiMatchBtn').addEventListener('click', handleAiSmartMatch);
   document.getElementById('postManualJobBtn').addEventListener('click', handleManualJobPost);
   document.getElementById('browseElectriciansBtn').addEventListener('click', () => setActiveTab('find'));
   document.getElementById('jobImage').addEventListener('change', handleImagePreview);
+  document.getElementById('removeImageBtn').addEventListener('click', clearImagePreview);
   document.getElementById('aiFloatBtn').addEventListener('click', openAiFinderModal);
   document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
   document.getElementById('modalOverlay').addEventListener('click', (event) => {
@@ -56,6 +56,10 @@ function bindEvents() {
     if (event.key === 'Escape') {
       closeModal();
     }
+  });
+
+  Array.from(document.querySelectorAll('#jobForm input, #jobForm textarea')).forEach((input) => {
+    input.addEventListener('input', () => clearFieldError(input));
   });
 }
 
@@ -89,66 +93,27 @@ function setActiveTab(tab) {
   }
 }
 
-// API boundary: all protected requests go through the orchestrator with bearer auth.
-function beginApi(message) {
-  apiBusyCount += 1;
-  showSpinner(message);
-}
-
-function endApi() {
-  apiBusyCount = Math.max(0, apiBusyCount - 1);
-
-  if (apiBusyCount === 0) {
-    hideSpinner();
-  }
-}
-
 async function requestJson(path, options, loadingMessage) {
-  beginApi(loadingMessage || 'Loading...');
-
-  try {
-    const response = await fetch(apiUrl(path), options);
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      const error = new Error('API request failed');
-      error.userMessage = getSafeErrorMessage(data);
-      throw error;
-    }
-
-    return data;
-  } finally {
-    endApi();
-  }
+  return requestApi(path, options, loadingMessage || 'Loading...');
 }
 
 async function requestFormData(path, formData, loadingMessage) {
-  beginApi(loadingMessage || 'Uploading...');
-
-  try {
-    const response = await fetch(apiUrl(path), {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + getToken()
-      },
-      body: formData
-    });
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      const error = new Error('API request failed');
-      error.userMessage = getSafeErrorMessage(data);
-      throw error;
-    }
-
-    return data;
-  } finally {
-    endApi();
-  }
+  return requestApi(path, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + getToken()
+    },
+    body: formData
+  }, loadingMessage || 'Uploading...');
 }
 
 function showRequestError(error) {
-  showToast(error.userMessage || 'Something went wrong. Please try again.', 'error');
+  if (error && error.status === 401) {
+    handleSessionExpired();
+    return;
+  }
+
+  showToast((error && error.userMessage) || 'Something went wrong. Please try again', 'error');
 }
 
 // Data loading keeps backend shape normalization close to the fetch that needs it.
@@ -170,7 +135,7 @@ async function loadCustomerProfile() {
   }
 }
 
-async function loadElectricians() {
+async function loadElectricians(triggerButton) {
   const city = document.getElementById('cityFilter').value.trim();
   const skill = document.getElementById('skillFilter').value;
   const params = new URLSearchParams();
@@ -185,6 +150,8 @@ async function loadElectricians() {
 
   const path = '/api/electricians' + (params.toString() ? '?' + params.toString() : '');
 
+  setButtonLoading(triggerButton, true, 'Searching');
+
   try {
     const data = await requestJson(path, {
       method: 'GET',
@@ -194,8 +161,11 @@ async function loadElectricians() {
     electricianCache = normalizeArray(data, 'electricians');
     renderElectricians();
   } catch (error) {
+    electricianCache = [];
     showRequestError(error);
-    renderElectricians([]);
+    renderElectricians();
+  } finally {
+    setButtonLoading(triggerButton, false);
   }
 }
 
@@ -209,8 +179,9 @@ async function loadJobs() {
     customerJobs = normalizeArray(data, 'jobs');
     renderJobs();
   } catch (error) {
+    customerJobs = [];
     showRequestError(error);
-    renderJobs([]);
+    renderJobs();
   }
 }
 
@@ -272,7 +243,7 @@ function renderJobs() {
   if (!customerJobs.length) {
     list.innerHTML = [
       '<div class="card empty-state">',
-      '  <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg></div>',
+      '  <div class="empty-illustration" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg></div>',
       '  <h3>No jobs yet. Post your first job!</h3>',
       '  <button class="btn-primary" id="emptyPostJobBtn" type="button">Post a Job</button>',
       '</div>'
@@ -308,7 +279,7 @@ function jobCardHtml(job) {
     '<article class="card job-card">',
     '  <div>',
     '    <h3 class="card-title">' + escapeHtml(job.title || 'Electrical job') + '</h3>',
-    '    <p class="muted">' + escapeHtml(formatDateTime(job.created_at)) + '</p>',
+    '    <p class="muted">' + escapeHtml(formatRelativeTime(job.created_at)) + '</p>',
     '  </div>',
     '  <div class="tag-list">',
     '    <span class="badge badge-status-' + status + '">' + escapeHtml(toTitleCase(status)) + '</span>',
@@ -369,7 +340,7 @@ function diagnosisCardHtml(job) {
 
 function topMatchCardsHtml(matches, action) {
   if (!matches.length) {
-    return '<div class="card empty-state"><h3>No matches found</h3><p>Try another description or city.</p></div>';
+    return emptyState('No matches found', 'Try another description or city.', 'match');
   }
 
   return matches.slice(0, 3).map((match, index) => {
@@ -393,31 +364,142 @@ function topMatchCardsHtml(matches, action) {
 // Job posting isolates multipart payload creation from the UI actions that trigger it.
 function handleImagePreview() {
   const file = document.getElementById('jobImage').files[0];
-  const preview = document.getElementById('imagePreview');
 
   if (!file) {
-    preview.classList.remove('is-visible');
-    preview.removeAttribute('src');
+    clearImagePreview();
+    return;
+  }
+
+  clearFieldError(document.getElementById('jobImage'));
+  showImagePreview(file, {
+    wrapId: 'imagePreviewWrap',
+    previewId: 'imagePreview',
+    nameId: 'imagePreviewName',
+    sizeId: 'imagePreviewSize'
+  });
+}
+
+function clearImagePreview() {
+  const imageInput = document.getElementById('jobImage');
+
+  imageInput.value = '';
+  clearPreviewElements({
+    wrapId: 'imagePreviewWrap',
+    previewId: 'imagePreview',
+    nameId: 'imagePreviewName',
+    sizeId: 'imagePreviewSize'
+  });
+}
+
+function showImagePreview(file, ids) {
+  const previewWrap = document.getElementById(ids.wrapId);
+  const preview = document.getElementById(ids.previewId);
+  const name = document.getElementById(ids.nameId);
+  const size = document.getElementById(ids.sizeId);
+
+  if (!previewWrap || !preview || !name || !size) {
     return;
   }
 
   preview.src = URL.createObjectURL(file);
+  name.textContent = file.name;
+  size.textContent = formatFileSize(file.size);
+  previewWrap.classList.add('is-visible');
   preview.classList.add('is-visible');
 }
 
-function buildJobFormData(requireImage) {
-  const title = document.getElementById('jobTitle').value.trim();
-  const description = document.getElementById('jobDescription').value.trim();
-  const city = document.getElementById('jobCity').value.trim();
-  const image = document.getElementById('jobImage').files[0];
+function clearPreviewElements(ids) {
+  const previewWrap = document.getElementById(ids.wrapId);
+  const preview = document.getElementById(ids.previewId);
+  const name = document.getElementById(ids.nameId);
+  const size = document.getElementById(ids.sizeId);
 
-  if (!title || !description || !city) {
-    showToast('Please complete the job title, description, and city.', 'error');
-    return null;
+  if (previewWrap) {
+    previewWrap.classList.remove('is-visible');
   }
 
+  if (preview) {
+    preview.classList.remove('is-visible');
+    preview.removeAttribute('src');
+  }
+
+  if (name) {
+    name.textContent = '';
+  }
+
+  if (size) {
+    size.textContent = '';
+  }
+}
+
+function compressImageForDisplay(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.addEventListener('load', () => {
+      const maxWidth = 800;
+      const scale = image.width > maxWidth ? maxWidth / image.width : 1;
+      const canvas = document.createElement('canvas');
+
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    }, { once: true });
+
+    image.addEventListener('error', () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Could not compress image preview'));
+    }, { once: true });
+
+    image.src = objectUrl;
+  });
+}
+
+async function replacePreviewWithCompressedImage(file, previewId) {
+  if (!file) {
+    return;
+  }
+
+  const preview = document.getElementById(previewId);
+
+  if (!preview) {
+    return;
+  }
+
+  try {
+    preview.src = await compressImageForDisplay(file);
+  } catch (error) {
+    console.warn('Display image compression failed; keeping original preview.', error);
+  }
+}
+
+function buildJobFormData(requireImage) {
+  const titleField = document.getElementById('jobTitle');
+  const descriptionField = document.getElementById('jobDescription');
+  const cityField = document.getElementById('jobCity');
+  const imageField = document.getElementById('jobImage');
+  const title = titleField.value.trim();
+  const description = descriptionField.value.trim();
+  const city = cityField.value.trim();
+  const image = imageField.files[0];
+  const checks = [
+    validateRequiredField(titleField, 'Job title is required.'),
+    validateRequiredField(descriptionField, 'Description is required.'),
+    validateRequiredField(cityField, 'City is required.')
+  ];
+
   if (requireImage && !image) {
-    showToast('Please upload an image for AI Smart Match.', 'error');
+    setFieldError(imageField, 'Please upload an image for AI Smart Match.');
+    checks.push(false);
+  } else {
+    clearFieldError(imageField);
+  }
+
+  if (!checks.every(Boolean)) {
     return null;
   }
 
@@ -442,18 +524,20 @@ async function handleAiSmartMatch() {
     return;
   }
 
+  const image = document.getElementById('jobImage').files[0];
   formData.append('use_ai', 'true');
-  button.disabled = true;
+  setButtonLoading(button, true, 'Matching');
 
   try {
     const result = await requestFormData('/api/jobs', formData, 'AI is analyzing your issue...');
+    await replacePreviewWithCompressedImage(image, 'imagePreview');
     showToast('AI match completed.', 'success');
     renderAiResults(result);
     await loadJobs();
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
@@ -465,11 +549,13 @@ async function handleManualJobPost() {
     return;
   }
 
+  const image = document.getElementById('jobImage').files[0];
   formData.append('use_ai', 'false');
-  button.disabled = true;
+  setButtonLoading(button, true, 'Posting');
 
   try {
     await requestFormData('/api/jobs', formData, 'Posting your job...');
+    await replacePreviewWithCompressedImage(image, 'imagePreview');
     showToast('Job posted for electricians to review.', 'success');
     resetPostForm();
     await loadJobs();
@@ -477,7 +563,7 @@ async function handleManualJobPost() {
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
@@ -489,7 +575,7 @@ async function selectMatchedElectrician(index, button) {
     return;
   }
 
-  button.disabled = true;
+  setButtonLoading(button, true, 'Selecting');
 
   try {
     await requestJson('/api/jobs/' + encodeURIComponent(lastCreatedJob.id) + '/status', {
@@ -507,13 +593,14 @@ async function selectMatchedElectrician(index, button) {
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
 function resetPostForm() {
   document.getElementById('jobForm').reset();
-  document.getElementById('imagePreview').classList.remove('is-visible');
+  clearImagePreview();
+  clearFormErrors(document.getElementById('jobForm'));
   document.getElementById('postComposer').classList.remove('hidden');
   document.getElementById('aiResults').classList.add('hidden');
   document.getElementById('aiResults').innerHTML = '';
@@ -556,7 +643,7 @@ function openJobDetailsModal(job) {
   openModal([
     '<h2 id="modalTitle">' + escapeHtml(job.title || 'Job details') + '</h2>',
     '<div class="detail-list">',
-    detailRow('Date posted', formatDateTime(job.created_at)),
+    detailRow('Date posted', formatRelativeTime(job.created_at)),
     detailRow('Status', '<span class="badge badge-status-' + status + '">' + escapeHtml(toTitleCase(status)) + '</span>', true),
     detailRow('City', job.city || 'Not listed'),
     detailRow('Description', job.description || 'No description available.'),
@@ -569,6 +656,8 @@ function openJobDetailsModal(job) {
 }
 
 function openAiFinderModal() {
+  const imageUploadTemplate = document.getElementById('quickAiImageUploadTemplate');
+
   openModal([
     '<h2 id="modalTitle">AI Electrician Finder</h2>',
     '<p class="muted">Describe your problem and let AI find the best electrician</p>',
@@ -581,12 +670,58 @@ function openAiFinderModal() {
     '    <label for="quickCity">City</label>',
     '    <input type="text" id="quickCity" required value="' + escapeHtml((customerProfile && customerProfile.city) || '') + '">',
     '  </div>',
+    imageUploadTemplate ? imageUploadTemplate.innerHTML : '',
     '  <button class="btn-primary btn-full" id="quickAiSubmitBtn" type="submit">Find Best Match</button>',
     '</form>',
     '<div class="modal-matches" id="quickAiResults"></div>'
   ].join(''), false);
 
   document.getElementById('quickAiForm').addEventListener('submit', handleQuickAiSubmit);
+  const quickImage = document.getElementById('quickAiImage');
+  const quickRemoveImage = document.getElementById('quickRemoveImageBtn');
+
+  if (quickImage) {
+    quickImage.addEventListener('change', handleQuickImagePreview);
+  }
+
+  if (quickRemoveImage) {
+    quickRemoveImage.addEventListener('click', clearQuickImagePreview);
+  }
+  Array.from(document.querySelectorAll('#quickAiForm textarea, #quickAiForm input')).forEach((field) => {
+    field.addEventListener('input', () => clearFieldError(field));
+  });
+}
+
+function handleQuickImagePreview() {
+  const file = document.getElementById('quickAiImage').files[0];
+
+  if (!file) {
+    clearQuickImagePreview();
+    return;
+  }
+
+  clearFieldError(document.getElementById('quickAiImage'));
+  showImagePreview(file, {
+    wrapId: 'quickImagePreviewWrap',
+    previewId: 'quickImagePreview',
+    nameId: 'quickImagePreviewName',
+    sizeId: 'quickImagePreviewSize'
+  });
+}
+
+function clearQuickImagePreview() {
+  const imageInput = document.getElementById('quickAiImage');
+
+  if (imageInput) {
+    imageInput.value = '';
+  }
+
+  clearPreviewElements({
+    wrapId: 'quickImagePreviewWrap',
+    previewId: 'quickImagePreview',
+    nameId: 'quickImagePreviewName',
+    sizeId: 'quickImagePreviewSize'
+  });
 }
 
 async function handleQuickAiSubmit(event) {
@@ -595,10 +730,16 @@ async function handleQuickAiSubmit(event) {
   const button = document.getElementById('quickAiSubmitBtn');
   const description = document.getElementById('quickProblem').value.trim();
   const city = document.getElementById('quickCity').value.trim();
+  const quickImage = document.getElementById('quickAiImage');
+  const image = quickImage ? quickImage.files[0] : null;
   const results = document.getElementById('quickAiResults');
 
-  if (!description || !city) {
-    showToast('Please describe the problem and city.', 'error');
+  const isValid = [
+    validateRequiredField(document.getElementById('quickProblem'), 'Please describe the problem.'),
+    validateRequiredField(document.getElementById('quickCity'), 'City is required.')
+  ].every(Boolean);
+
+  if (!isValid) {
     return;
   }
 
@@ -609,11 +750,16 @@ async function handleQuickAiSubmit(event) {
   formData.append('city', city);
   formData.append('use_ai', 'true');
 
-  button.disabled = true;
+  if (image) {
+    formData.append('image', image);
+  }
+
+  setButtonLoading(button, true, 'Finding');
   results.innerHTML = '<div class="card"><p class="muted">AI is finding the best matches...</p></div>';
 
   try {
     const result = await requestFormData('/api/jobs', formData, 'Finding best match...');
+    await replacePreviewWithCompressedImage(image, 'quickImagePreview');
     const job = result.job || {};
     const matches = normalizeMatches(result.matches || []);
     lastCreatedJob = job;
@@ -635,7 +781,7 @@ async function handleQuickAiSubmit(event) {
     results.innerHTML = '';
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
@@ -657,7 +803,7 @@ function closeModal() {
 
 // Chat starts a lightweight conversation job when no accepted job exists yet.
 async function openChatWithElectrician(electricianId, button) {
-  button.disabled = true;
+  setButtonLoading(button, true, 'Starting');
 
   try {
     const data = await requestJson('/api/jobs/direct-chat', {
@@ -679,7 +825,7 @@ async function openChatWithElectrician(electricianId, button) {
   } catch (error) {
     showRequestError(error);
   } finally {
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 }
 
@@ -770,16 +916,6 @@ function skillTagHtml(skill) {
 
 function detailRow(label, value, valueIsHtml) {
   return '<div class="detail-row"><strong>' + escapeHtml(label) + '</strong><span>' + (valueIsHtml ? value : escapeHtml(value)) + '</span></div>';
-}
-
-function emptyState(title, message) {
-  return [
-    '<div class="card empty-state">',
-    '  <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>',
-    '  <h3>' + escapeHtml(title) + '</h3>',
-    '  <p>' + escapeHtml(message) + '</p>',
-    '</div>'
-  ].join('');
 }
 
 function normalizeStatus(status) {

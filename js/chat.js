@@ -7,7 +7,6 @@ const MESSAGE_POLL_INTERVAL_MS = 2500;
 const messagesArea = document.getElementById('messagesArea');
 const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
-const sendBtn = document.getElementById('sendBtn');
 
 let jobId = '';
 let electricianId = '';
@@ -17,7 +16,6 @@ let chatChannel = null;
 let messagePollTimer = null;
 let isPollingMessages = false;
 let lastPollHadError = false;
-let apiBusyCount = 0;
 
 document.addEventListener('DOMContentLoaded', initChatPage);
 window.addEventListener('beforeunload', cleanupChat);
@@ -42,6 +40,7 @@ async function initChatPage() {
   document.getElementById('backBtn').addEventListener('click', redirectBack);
   messageForm.addEventListener('submit', handleSendMessage);
   messageInput.addEventListener('keydown', handleMessageKeydown);
+  messageInput.addEventListener('input', () => clearFieldError(messageInput));
 
   await loadJobDetails();
   await loadMessages();
@@ -61,54 +60,21 @@ function redirectBack() {
   window.location.href = getRole() === 'electrician' ? 'electrician.html' : 'customer.html';
 }
 
-// API boundary: message history and sends use the orchestrator with bearer auth.
-function beginApi(message) {
-  apiBusyCount += 1;
-  showSpinner(message);
-}
-
-function endApi() {
-  apiBusyCount = Math.max(0, apiBusyCount - 1);
-
-  if (apiBusyCount === 0) {
-    hideSpinner();
-  }
-}
-
 async function requestJson(path, options, loadingMessage) {
-  beginApi(loadingMessage || 'Loading...');
-
-  try {
-    const response = await fetch(apiUrl(path), options);
-    const data = await parseApiResponse(response);
-
-    if (!response.ok) {
-      const error = new Error('API request failed');
-      error.userMessage = getSafeErrorMessage(data);
-      throw error;
-    }
-
-    return data;
-  } finally {
-    endApi();
-  }
+  return requestApi(path, options, loadingMessage || 'Loading...');
 }
 
 async function requestJsonQuiet(path, options) {
-  const response = await fetch(apiUrl(path), options);
-  const data = await parseApiResponse(response);
-
-  if (!response.ok) {
-    const error = new Error('API request failed');
-    error.userMessage = getSafeErrorMessage(data);
-    throw error;
-  }
-
-  return data;
+  return requestApi(path, options, 'Loading...', { silent: true });
 }
 
 function showRequestError(error) {
-  showToast(error.userMessage || 'Something went wrong. Please try again.', 'error');
+  if (error && error.status === 401) {
+    handleSessionExpired();
+    return;
+  }
+
+  showToast((error && error.userMessage) || 'Something went wrong. Please try again', 'error');
 }
 
 async function createDirectChat(targetElectricianId) {
@@ -179,6 +145,7 @@ async function loadMessages(options = {}) {
     }
 
     if (!lastPollHadError) {
+      showRequestError(error);
       console.warn('Message refresh failed.', error);
     }
 
@@ -196,13 +163,12 @@ function renderChatHeader(job) {
 }
 
 function renderEmptyConversation() {
-  messagesArea.innerHTML = [
-    '<div class="card empty-state" id="emptyConversation">',
-    '  <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4V5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>',
-    '  <h3>No messages yet</h3>',
-    '  <p>Start the conversation about this job.</p>',
-    '</div>'
-  ].join('');
+  messagesArea.innerHTML = emptyState('No messages yet', 'Start the conversation about this job.', 'chat');
+  const empty = messagesArea.querySelector('.empty-state');
+
+  if (empty) {
+    empty.id = 'emptyConversation';
+  }
 }
 
 // Realtime is lazy-loaded so the HTML stays clean and initial page parse stays light.
@@ -303,19 +269,117 @@ function appendMessage(msg) {
   const isMine = String(msg.sender_id) === String(getUserId());
   const row = document.createElement('div');
   const bubble = document.createElement('div');
-  const time = document.createElement('div');
+  const meta = document.createElement('div');
 
   row.id = 'msg-' + msg.id;
   row.className = 'chat-bubble-row ' + (isMine ? 'mine' : 'other');
   bubble.className = 'chat-bubble ' + (isMine ? 'chat-bubble-mine' : 'chat-bubble-other');
   bubble.textContent = msg.content || '';
-  time.className = 'chat-time';
-  time.textContent = formatDateTime(msg.created_at);
+  meta.className = 'chat-time';
+  meta.textContent = formatRelativeTime(msg.created_at);
+
+  if (isMine && msg.deliveryStatus) {
+    meta.appendChild(createDeliveryIcon(msg.deliveryStatus));
+  }
 
   row.appendChild(bubble);
-  row.appendChild(time);
+  row.appendChild(meta);
   messagesArea.appendChild(row);
   scrollToBottom();
+}
+
+function appendOptimisticMessage(content) {
+  const tempId = 'temp-' + Date.now();
+
+  appendMessage({
+    id: tempId,
+    sender_id: getUserId(),
+    content,
+    created_at: new Date().toISOString(),
+    deliveryStatus: 'pending'
+  });
+
+  return tempId;
+}
+
+function markMessageSent(tempId, message) {
+  const tempRow = document.getElementById('msg-' + tempId);
+  const realMessage = message || {};
+
+  if (!tempRow) {
+    appendMessage(Object.assign({}, realMessage, { deliveryStatus: 'sent' }));
+    return;
+  }
+
+  const existingRealRow = realMessage.id ? document.getElementById('msg-' + realMessage.id) : null;
+  if (existingRealRow) {
+    tempRow.remove();
+    updateMessageStatus(existingRealRow, 'sent', realMessage.created_at);
+    return;
+  }
+
+  if (realMessage.id) {
+    tempRow.id = 'msg-' + realMessage.id;
+  }
+
+  updateMessageStatus(tempRow, 'sent', realMessage.created_at);
+}
+
+function removeMessageById(id) {
+  const row = document.getElementById('msg-' + id);
+
+  if (row) {
+    row.remove();
+  }
+}
+
+function createDeliveryIcon(status) {
+  const icon = document.createElement('span');
+  icon.className = 'message-status-icon message-status-' + status;
+
+  if (status === 'sent') {
+    icon.textContent = '\u2713';
+    icon.setAttribute('aria-label', 'Sent');
+  } else {
+    icon.setAttribute('aria-label', 'Sending');
+  }
+
+  icon.setAttribute('role', 'img');
+  return icon;
+}
+
+function updateMessageStatus(row, status, createdAt) {
+  const time = row.querySelector('.chat-time');
+
+  if (!time) {
+    return;
+  }
+
+  time.textContent = formatRelativeTime(createdAt);
+  time.appendChild(createDeliveryIcon(status));
+}
+
+function showRetryToast(content) {
+  const container = getToastContainer();
+  const toast = document.createElement('button');
+
+  toast.className = 'toast toast-error toast-action';
+  toast.type = 'button';
+  toast.textContent = 'Message failed to send. Tap to retry';
+  toast.addEventListener('click', () => {
+    toast.remove();
+    messageInput.value = content;
+    messageInput.focus();
+    messageForm.requestSubmit();
+  });
+  container.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.classList.add('toast-hide');
+    window.setTimeout(() => {
+      toast.remove();
+    }, 250);
+  }, 5000);
 }
 
 function removeEmptyConversation() {
@@ -338,14 +402,17 @@ async function handleSendMessage(event) {
   const content = messageInput.value.trim();
 
   if (!content) {
+    setFieldError(messageInput, 'Message is required.');
     return;
   }
 
-  sendBtn.disabled = true;
-  messageInput.disabled = true;
+  clearFieldError(messageInput);
+  const tempId = appendOptimisticMessage(content);
+  messageInput.value = '';
+  messageInput.focus();
 
   try {
-    const data = await requestJson('/api/messages', {
+    const data = await requestJsonQuiet('/api/messages', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
@@ -353,18 +420,15 @@ async function handleSendMessage(event) {
         sender_id: getUserId(),
         content
       })
-    }, 'Sending message...');
+    });
 
     if (data.message) {
-      appendMessage(data.message);
+      markMessageSent(tempId, data.message);
     }
-
-    messageInput.value = '';
   } catch (error) {
-    showRequestError(error);
-  } finally {
-    sendBtn.disabled = false;
-    messageInput.disabled = false;
+    removeMessageById(tempId);
+    showRetryToast(content);
+    messageInput.value = content;
     messageInput.focus();
   }
 }
