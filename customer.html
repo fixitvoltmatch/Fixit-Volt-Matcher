@@ -1,0 +1,138 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Fixit Volt Matcher customer dashboard for finding electricians, posting jobs, and chatting.">
+  <title>Customer Dashboard - Fixit Volt Matcher</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/config.js"></script>
+</head>
+<body>
+  <nav class="navbar" aria-label="Customer navigation">
+    <div class="navbar-inner">
+      <a class="logo" href="customer.html" aria-label="Fixit Volt Matcher customer dashboard">Fixit Volt Matcher</a>
+      <div class="tab-nav" role="tablist" aria-label="Dashboard sections">
+        <button class="tab-button is-active" type="button" data-tab="find">Find Electrician</button>
+        <button class="tab-button" type="button" data-tab="post">Post a Job</button>
+        <button class="tab-button" type="button" data-tab="jobs">My Jobs</button>
+      </div>
+      <div class="navbar-right">
+        <button class="btn-danger" type="button" id="logoutBtn">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="dashboard page-shell">
+    <div class="dashboard-header">
+      <div class="dashboard-title">
+        <h1>Customer Dashboard</h1>
+        <p>Find trusted electricians, post electrical issues, and track your jobs.</p>
+      </div>
+    </div>
+
+    <section class="section-panel" id="findSection">
+      <div class="card filter-bar">
+        <div class="form-group">
+          <label for="cityFilter">City</label>
+          <input type="text" id="cityFilter" placeholder="Search by city">
+        </div>
+        <div class="form-group">
+          <label for="skillFilter">Skill</label>
+          <select id="skillFilter">
+            <option value="">All skills</option>
+          </select>
+        </div>
+        <button class="btn-primary" id="searchElectriciansBtn" type="button">Search</button>
+      </div>
+
+      <div class="catalog-grid" id="electricianCatalog"></div>
+    </section>
+
+    <section class="section-panel hidden" id="postSection">
+      <div class="dashboard-title">
+        <h1>Describe Your Electrical Issue</h1>
+        <p>Give the AI enough context to diagnose the problem and match the right electrician.</p>
+      </div>
+
+      <div class="post-layout" id="postComposer">
+        <form class="card" id="jobForm" novalidate>
+          <div class="form-group">
+            <label for="jobTitle">Job title</label>
+            <input type="text" id="jobTitle" required>
+          </div>
+
+          <div class="form-group">
+            <label for="jobDescription">Description</label>
+            <textarea id="jobDescription" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="jobCity">City</label>
+            <input type="text" id="jobCity" required>
+          </div>
+
+          <div class="form-group">
+            <label for="jobImage">Upload Image</label>
+            <span class="input-help">Required for AI Smart Match, optional for manual posting.</span>
+            <input type="file" id="jobImage" accept="image/*">
+            <img class="image-preview" id="imagePreview" alt="Selected electrical issue preview">
+          </div>
+        </form>
+
+        <div class="option-stack">
+          <article class="option-card is-primary">
+            <div class="option-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M13 2 4 14h7l-1 8 10-13h-7l0-7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h3>AI Smart Match</h3>
+            <p class="muted">Let AI diagnose your issue and find the best electrician for you instantly</p>
+            <button class="btn-primary btn-full" id="getAiMatchBtn" type="button">Get AI Match</button>
+          </article>
+
+          <article class="option-card">
+            <div class="option-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                <path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3>Post Without AI</h3>
+            <p class="muted">Send the job directly to available electricians without AI diagnosis</p>
+            <button class="btn-secondary btn-full" id="postManualJobBtn" type="button">Post Job</button>
+            <button class="btn-ghost btn-full" id="browseElectriciansBtn" type="button">Browse Electricians</button>
+          </article>
+        </div>
+      </div>
+
+      <div class="section-panel hidden" id="aiResults"></div>
+    </section>
+
+    <section class="section-panel hidden" id="jobsSection">
+      <div class="dashboard-title">
+        <h1>My Jobs</h1>
+        <p>Review posted jobs, AI diagnosis, status, and chat access.</p>
+      </div>
+      <div class="jobs-list" id="jobsList"></div>
+    </section>
+  </main>
+
+  <button class="ai-float-btn" id="aiFloatBtn" type="button" aria-label="Open AI Electrician Finder">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M13 2 4 14h7l-1 8 10-13h-7l0-7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
+  <div class="modal-overlay" id="modalOverlay" aria-hidden="true">
+    <div class="modal-box modal-wide" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="modalCloseBtn" type="button" aria-label="Close modal">&times;</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+  <script src="js/customer.js"></script>
+</body>
+</html>
+
+
