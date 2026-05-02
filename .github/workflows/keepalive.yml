@@ -1,0 +1,34 @@
+name: Keep HF Spaces Alive
+
+on:
+  schedule:
+    - cron: '23 1 * * *'    # 1:23 AM  (12-3 window)
+    - cron: '47 4 * * *'    # 4:47 AM  (3-6 window)
+    - cron: '11 7 * * *'    # 7:11 AM  (6-9 window)
+    - cron: '38 10 * * *'   # 10:38 AM (9-12 window)
+    - cron: '54 13 * * *'   # 1:54 PM  (12-3 window)
+    - cron: '07 16 * * *'   # 4:07 PM  (3-6 window)
+    - cron: '29 19 * * *'   # 7:29 PM  (6-9 window)
+    - cron: '51 22 * * *'   # 10:51 PM (9-12 window)
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Random delay
+        run: sleep $((RANDOM % 3600))
+
+      - name: Ping fixit-ai
+        run: curl -s https://fixit-volt-matcher-fixit-ai.hf.space/health
+
+      - name: Ping fixit-users
+        run: curl -s https://fixit-volt-matcher-fixit-users.hf.space/health
+
+      - name: Ping fixit-jobs
+        run: curl -s https://fixit-volt-matcher-fixit-jobs.hf.space/health
+
+      - name: Ping fixit-chat
+        run: curl -s https://fixit-volt-matcher-fixit-chat.hf.space/health
+
+      - name: Ping fixit-orchestrator
+        run: curl -s https://fixit-volt-matcher-fixit-orchestrator.hf.space/health
