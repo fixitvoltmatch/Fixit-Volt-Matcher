@@ -7,7 +7,7 @@ const deleteConfirmCloseBtn = document.getElementById('deleteConfirmCloseBtn');
 const deleteConfirmCancelBtn = document.getElementById('deleteConfirmCancelBtn');
 const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
 const deleteConfirmInput = document.getElementById('deleteConfirmInput');
-const availabilityToggle = document.getElementById('availabilityToggle');
+const availabilityToggle = document.getElementById('availability-toggle');
 const electricianSection = document.getElementById('electricianSection');
 const skillsPicker = document.getElementById('skillsPicker');
 
@@ -58,8 +58,8 @@ async function loadUserProfile() {
       headers: getAuthHeaders()
     }, 'Loading your profile...');
 
-    currentUserData = data.user || data;
-    populateProfileForm(currentUserData);
+    currentUserData = data;
+    populateProfileForm(data);
     captureOriginalState();
   } catch (error) {
     showRequestError(error);
@@ -76,11 +76,11 @@ function populateProfileForm(data) {
   const profileRoleBadge = document.getElementById('profileRoleBadge');
 
   // Basic information
-  const fullName = data.full_name || '';
+  const fullName = data.user.full_name || '';
   fullNameField.value = fullName;
-  emailField.value = data.email || '';
-  cityField.value = data.city || '';
-  phoneField.value = data.phone || '';
+  emailField.value = data.user.email || '';
+  cityField.value = data.user.city || '';
+  phoneField.value = data.user.phone || '';
 
   // Profile header
   const initials = getInitials(fullName);
@@ -98,21 +98,20 @@ function populateProfileForm(data) {
   if (role === 'electrician') {
     electricianSection.classList.remove('hidden');
     
-    const bioField = document.getElementById('bio');
-    const experienceYearsField = document.getElementById('experienceYears');
+    document.getElementById('bio').value = 
+      data.electrician.bio || ''
 
-    bioField.value = data.bio || '';
-    experienceYearsField.value = data.experience_years || 0;
-    availabilityToggle.checked = data.is_available || false;
-    updateAvailabilityLabel();
+    document.getElementById('experience-years').value = 
+      data.electrician.experience_years || 0
 
-    // Pre-check electrician skills
-    if (Array.isArray(data.skills) && data.skills.length > 0) {
-      const skillNames = data.skills.map((s) => String(s.name || s).trim().toLowerCase());
-      renderSkills(skillNames);
-    } else {
-      renderSkills([]);
-    }
+    const availToggle = document.getElementById('availability-toggle')
+    availToggle.checked = data.electrician.available === true
+
+    document.querySelectorAll('input[name="skills"]')
+      .forEach(cb => {
+        cb.checked = (data.electrician.skills || [])
+          .includes(cb.value)
+      })
   }
 }
 
@@ -135,9 +134,9 @@ function captureOriginalState() {
 
   if (getRole() === 'electrician') {
     originalFormState.bio = document.getElementById('bio').value;
-    originalFormState.experienceYears = document.getElementById('experienceYears').value;
+    originalFormState.experienceYears = document.getElementById('experience-years').value;
     originalFormState.skills = collectSelectedSkills();
-    originalFormState.isAvailable = availabilityToggle.checked;
+    originalFormState.isAvailable = document.getElementById('availability-toggle').checked;
   }
 
   pendingChanges = {};
@@ -168,9 +167,9 @@ function getFormState() {
 
   if (getRole() === 'electrician') {
     state.bio = document.getElementById('bio').value;
-    state.experienceYears = document.getElementById('experienceYears').value;
+    state.experienceYears = document.getElementById('experience-years').value;
     state.skills = collectSelectedSkills();
-    state.isAvailable = availabilityToggle.checked;
+    state.isAvailable = document.getElementById('availability-toggle').checked;
   }
 
   return state;
@@ -245,7 +244,7 @@ function skillGroupHtml(title, skills, checked) {
 function skillCheckboxHtml(skill, isChecked) {
   return [
     '<label class="checkbox-card">',
-    '  <input type="checkbox" value="' + escapeHtmlShared(skill.name) + '"' + (isChecked ? ' checked' : '') + '>',
+    '  <input type="checkbox" name="skills" value="' + escapeHtmlShared(skill.name) + '"' + (isChecked ? ' checked' : '') + '>',
     '  ' + escapeHtmlShared(toTitleCase(skill.name)),
     '</label>'
   ].join('');
@@ -340,10 +339,10 @@ async function handleAvailabilityChange() {
     await requestApi('/api/users/' + encodeURIComponent(getUserId()), {
       method: 'PATCH',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ is_available: isAvailable })
+      body: JSON.stringify({ available: isAvailable })
     }, '');
 
-    updateAvailabilityLabel();
+    updateAvailabilityUI(isAvailable);
     const message = isAvailable ? 'You are now available' : 'You are now unavailable';
     showToast(message, 'success');
   } catch (error) {
@@ -353,9 +352,17 @@ async function handleAvailabilityChange() {
   }
 }
 
-function updateAvailabilityLabel() {
+function updateAvailabilityUI(isAvailable) {
   const availabilityLabel = document.getElementById('availabilityLabel');
-  availabilityLabel.textContent = availabilityToggle.checked ? 'Available' : 'Unavailable';
+  const toggle = document.getElementById('availability-ttoggle');
+  
+  // Update both the toggle visual state and text/badge
+  if (toggle) {
+    toggle.checked = isAvailable;
+  }
+  if (availabilityLabel) {
+    availabilityLabel.textContent = isAvailable ? 'Available' : 'Unavailable';
+  }
 }
 
 function openDeleteModal() {
