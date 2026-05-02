@@ -652,7 +652,7 @@ function initPageFade() {
   document.body.classList.add('page-ready');
 }
 
-document.addEventListener('DOMContentLo666aded', () => {
+document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   initMobileNav();
   initPageFade();
