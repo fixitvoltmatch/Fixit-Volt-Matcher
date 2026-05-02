@@ -100,7 +100,7 @@ async function loadElectricianProfile() {
 async function loadAvailableJobs() {
   try {
     const [pendingData, matchedData] = await Promise.all([
-      requestJson('/api/jobs?status=pending', {
+      requestJson('/api/jobs?status=pending&electrician_id=' + encodeURIComponent(getUserId()), {
         method: 'GET',
         headers: getAuthHeaders()
       }, 'Loading available jobs...'),
@@ -289,7 +289,10 @@ async function rejectJob(jobId, button) {
     await requestJson('/api/jobs/' + encodeURIComponent(jobId) + '/status', {
       method: 'PATCH',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ status: 'rejected' })
+      body: JSON.stringify({
+        status: 'rejected',
+        electrician_id: getUserId()
+      })
     }, 'Rejecting job...');
 
     showToast('Job rejected.', 'success');
