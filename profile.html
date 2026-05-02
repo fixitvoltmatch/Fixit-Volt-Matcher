@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Manage your Fixit Volt Matcher profile information.">
-  <title>My Profile - Fixit Volt Matcher</title>
+  <meta name="description" content="Manage your Fixit Volt Matcher profile.">
+  <title>Profile - Fixit Volt Matcher</title>
   <link rel="stylesheet" href="css/style.css">
   <script src="js/config.js"></script>
 </head>
@@ -13,8 +13,7 @@
     <div class="navbar-inner">
       <a class="logo" href="index.html" aria-label="Fixit Volt Matcher home">Fixit Volt Matcher</a>
       <div class="navbar-right">
-        <button class="btn-secondary" type="button" id="backBtn">← Back</button>
-        <button class="btn-primary" type="button" id="saveBtn" disabled>Save Changes</button>
+        <button class="btn-danger" type="button" id="backBtn">Back</button>
       </div>
       <button class="mobile-menu-toggle" type="button" aria-label="Open navigation menu" aria-controls="mobileMenu" aria-expanded="false">
         <span></span>
@@ -25,95 +24,88 @@
     </div>
   </nav>
 
-  <main class="profile-page page-shell">
-    <div class="profile-header">
-      <div class="profile-avatar-section">
-        <div class="profile-avatar" id="profileAvatar"></div>
-        <div class="profile-name-wrap">
-          <h1 id="profileNameDisplay"></h1>
-          <span class="badge" id="profileRoleBadge"></span>
-        </div>
-      </div>
-    </div>
+  <main class="profile-page">
+    <div class="profile-container">
+      <section class="card profile-card">
+        <h1>Your Profile</h1>
+        <p class="profile-subtitle">Manage your account information and preferences.</p>
 
-    <form class="profile-form" id="profileForm" novalidate>
-      <section class="profile-section card">
-        <h2>Basic Information</h2>
-        
-        <div class="form-group full-width">
-          <label for="fullName">Full name</label>
-          <input type="text" id="fullName" name="full_name" required>
-        </div>
+        <form id="profileForm" novalidate>
+          <!-- User Basic Info -->
+          <div class="form-section">
+            <h2>Basic Information</h2>
+            
+            <div class="form-group">
+              <label for="email">Email</label>
+              <input type="email" id="email" name="email" readonly>
+            </div>
 
-        <div class="form-group full-width">
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email" readonly title="Email cannot be changed">
-        </div>
+            <div class="form-group">
+              <label for="fullName">Full Name</label>
+              <input type="text" id="fullName" name="full_name" placeholder="Your full name" required>
+            </div>
 
-        <div class="form-group">
-          <label for="city">City</label>
-          <input type="text" id="city" name="city" required>
-        </div>
+            <div class="form-group">
+              <label for="city">City</label>
+              <input type="text" id="city" name="city" placeholder="Your city" required>
+            </div>
 
-        <div class="form-group">
-          <label for="phone">Phone</label>
-          <input type="text" id="phone" name="phone" required>
-        </div>
-      </section>
+            <div class="form-group">
+              <label for="phone">Phone</label>
+              <input type="tel" id="phone" name="phone" placeholder="Your phone number" required>
+            </div>
+          </div>
 
-      <section class="profile-section card hidden" id="electricianSection">
-        <h2>Electrician Information</h2>
-        
-        <div class="form-group full-width">
-          <label>Electrical categories</label>
-          <div class="skills-picker" id="skillsPicker">
-            <p class="input-help">Loading categories...</p>
+          <!-- Electrician-only fields -->
+          <div class="form-section" id="electricianSection" style="display: none;">
+            <h2>Professional Information</h2>
+
+            <div class="form-group">
+              <label for="bio">Bio</label>
+              <textarea id="bio" name="bio" placeholder="Tell customers about yourself" rows="4"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="experience">Years of Experience</label>
+              <input type="number" id="experience" name="experience_years" min="0" max="70" placeholder="0">
+            </div>
+
+            <div class="form-group">
+              <label for="skills">Skills</label>
+              <div id="skillsContainer" class="skills-container"></div>
+              <input type="text" id="skillInput" placeholder="Add a skill and press Enter">
+              <input type="hidden" id="skills" name="skills">
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-card">
+                <input type="checkbox" id="available" name="available">
+                Available for work
+              </label>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn-primary" type="submit" id="saveBtn">Save Changes</button>
+            <button class="btn-danger" type="button" id="deleteBtn">Delete Account</button>
+          </div>
+        </form>
+
+        <div id="deleteConfirmModal" class="modal hidden">
+          <div class="modal-overlay" id="deleteModalOverlay"></div>
+          <div class="modal-content">
+            <h2>Delete Account</h2>
+            <p>Are you sure you want to delete your account? This action cannot be undone.</p>
+            <p class="warning-text">All your data, profile information, and history will be permanently deleted.</p>
+            <div class="modal-actions">
+              <button class="btn-secondary" type="button" id="cancelDeleteBtn">Cancel</button>
+              <button class="btn-danger" type="button" id="confirmDeleteBtn">Yes, Delete My Account</button>
+            </div>
           </div>
         </div>
-
-        <div class="form-group full-width">
-          <label for="bio">Bio</label>
-          <textarea id="bio" name="bio" placeholder="Describe your experience"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="experience-years">Years of experience</label>
-          <input type="number" id="experience-years" name="experience_years" min="0" step="1">
-        </div>
-
-        <div class="form-group full-width">
-          <label class="switch-wrap" for="availability-toggle">
-            <span id="availabilityLabel">Unavailable</span>
-            <span class="switch">
-              <input type="checkbox" id="availability-toggle">
-              <span class="switch-slider"></span>
-            </span>
-          </label>
-          <p class="input-help">Toggle your availability to accept new jobs</p>
-        </div>
       </section>
-    </form>
-
-    <section class="danger-zone card">
-      <h2>Danger Zone</h2>
-      <p>Deleting your account is permanent and cannot be undone.</p>
-      <button class="btn-outline-danger btn-full" type="button" id="deleteAccountBtn">Delete Account</button>
-    </section>
-  </main>
-
-  <div class="modal-overlay" id="deleteConfirmModal" aria-hidden="true">
-    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
-      <button class="modal-close" id="deleteConfirmCloseBtn" type="button" aria-label="Close modal">&times;</button>
-      <h2 id="deleteConfirmTitle">Delete Account?</h2>
-      <p>Are you sure you want to delete your account? This will permanently delete all your data.</p>
-      <p><strong>Type "DELETE" below to confirm:</strong></p>
-      <input type="text" id="deleteConfirmInput" placeholder="Type DELETE to confirm">
-      <div class="modal-action-row">
-        <button class="btn-ghost" type="button" id="deleteConfirmCancelBtn">Cancel</button>
-        <button class="btn-outline-danger" type="button" id="deleteConfirmBtn" disabled>Delete Account</button>
-      </div>
     </div>
-  </div>
+  </main>
 
   <script src="js/profile.js"></script>
 </body>

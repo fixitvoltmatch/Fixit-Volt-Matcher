@@ -28,6 +28,7 @@ async function initElectricianDashboard() {
 
 function bindEvents() {
   document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('profileBtn').addEventListener('click', () => window.location.href = 'profile.html');
   getAvailabilityToggles().forEach((toggle) => {
     toggle.addEventListener('change', handleAvailabilityToggle);
   });

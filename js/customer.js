@@ -34,6 +34,7 @@ async function initCustomerDashboard() {
 
 function bindEvents() {
   document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('profileBtn').addEventListener('click', () => window.location.href = 'profile.html');
   document.getElementById('searchElectriciansBtn').addEventListener('click', (event) => loadElectricians(event.currentTarget));
   document.getElementById('getAiMatchBtn').addEventListener('click', handleAiSmartMatch);
   document.getElementById('postManualJobBtn').addEventListener('click', handleManualJobPost);
