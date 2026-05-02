@@ -438,10 +438,9 @@ async function requestApi(path, options = {}, loadingMessage = 'Loading...', set
     const data = await parseApiResponse(response);
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if (response.status === 401 && !settings.public) {  
         handleSessionExpired();
       }
-
       throw createApiError(response, data);
     }
 
@@ -454,6 +453,7 @@ async function requestApi(path, options = {}, loadingMessage = 'Loading...', set
     }
   }
 }
+
 
 function setButtonLoading(button, isLoading, loadingText) {
   if (!button) {

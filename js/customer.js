@@ -1,4 +1,3 @@
-﻿const ALL_SKILLS = ['wiring', 'switches', 'panels', 'lighting', 'breakers', 'fans', 'appliances', 'safety inspection'];
 const locationIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M12 21s7-5.1 7-11a7 7 0 0 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>';
 
 const sections = {
@@ -13,6 +12,7 @@ let electricianCache = [];
 let customerJobs = [];
 let lastCreatedJob = null;
 let lastMatches = [];
+let availableSkills = [];
 
 document.addEventListener('DOMContentLoaded', initCustomerDashboard);
 
@@ -25,8 +25,8 @@ async function initCustomerDashboard() {
     return;
   }
 
-  setupSkillFilter();
   bindEvents();
+  await loadSkills();
   await loadCustomerProfile();
   await loadElectricians();
   await loadJobs();
@@ -63,14 +63,36 @@ function bindEvents() {
   });
 }
 
-function setupSkillFilter() {
+async function loadSkills() {
+  try {
+    const data = await requestJson('/api/skills', {
+      method: 'GET',
+      headers: getPublicHeaders()
+    }, 'Loading skills...');
+
+    availableSkills = normalizeSkills(data);
+    renderSkillFilter();
+  } catch (error) {
+    availableSkills = [];
+    renderSkillFilter();
+  }
+}
+
+function renderSkillFilter() {
   const skillFilter = document.getElementById('skillFilter');
-  ALL_SKILLS.forEach((skill) => {
+  const selectedSkill = skillFilter.value;
+
+  skillFilter.innerHTML = '<option value="">All skills</option>';
+  availableSkills.forEach((skill) => {
     const option = document.createElement('option');
-    option.value = skill;
-    option.textContent = toTitleCase(skill);
+    option.value = skill.name;
+    option.textContent = toTitleCase(skill.name);
     skillFilter.appendChild(option);
   });
+
+  if (availableSkills.some((skill) => skill.name === selectedSkill)) {
+    skillFilter.value = selectedSkill;
+  }
 }
 
 function setActiveTab(tab) {
@@ -85,7 +107,7 @@ function setActiveTab(tab) {
   });
 
   if (activeTab === 'find') {
-    loadElectricians();
+    loadSkills().finally(() => loadElectricians());
   }
 
   if (activeTab === 'jobs') {
@@ -830,6 +852,17 @@ async function openChatWithElectrician(electricianId, button) {
 }
 
 // Formatting helpers absorb uneven API shapes and keep templates readable.
+function normalizeSkills(data) {
+  return normalizeArray(data, 'skills')
+    .filter((skill) => skill && skill.name)
+    .map((skill) => ({
+      id: skill.id,
+      name: String(skill.name).trim().toLowerCase(),
+      category: skill.category || '',
+      is_default: skill.is_default !== false
+    }));
+}
+
 function normalizeArray(data, key) {
   if (Array.isArray(data)) {
     return data;

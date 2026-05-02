@@ -709,6 +709,23 @@ select.is-invalid {
   gap: 10px;
 }
 
+.skills-picker {
+  display: grid;
+  gap: 16px;
+}
+
+.skill-group {
+  display: grid;
+  gap: 10px;
+}
+
+.skill-group-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 .checkbox-card {
   display: flex;
   align-items: center;
