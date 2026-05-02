@@ -285,6 +285,10 @@ function renderJobs() {
       window.location.href = 'chat.html?jobId=' + encodeURIComponent(button.dataset.id);
     });
   });
+
+  list.querySelectorAll('[data-action="job-delete"]').forEach((button) => {
+    button.addEventListener('click', () => deleteJob(button.dataset.id, button));
+  });
 }
 
 function jobCardHtml(job) {
@@ -295,6 +299,9 @@ function jobCardHtml(job) {
     : '';
   const chatButton = job.electrician_id && status !== 'rejected'
     ? '<button class="btn-primary" type="button" data-action="job-chat" data-id="' + escapeHtml(job.id) + '">Open Chat</button>'
+    : '';
+  const deleteButton = status === 'pending' || status === 'matched'
+    ? '<button class="btn-danger" type="button" data-action="job-delete" data-id="' + escapeHtml(job.id) + '">Delete</button>'
     : '';
 
   return [
@@ -313,6 +320,7 @@ function jobCardHtml(job) {
     '  <div class="card-actions">',
     chatButton,
     '    <button class="btn-secondary" type="button" data-action="job-details" data-id="' + escapeHtml(job.id) + '">View Details</button>',
+    deleteButton,
     '  </div>',
     '</article>'
   ].join('');
@@ -927,6 +935,31 @@ function findElectrician(id) {
 
 function findJob(id) {
   return customerJobs.find((job) => String(job.id) === String(id));
+}
+
+async function deleteJob(jobId, button) {
+  if (!confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+    return;
+  }
+
+  setButtonLoading(button, true, 'Deleting');
+
+  try {
+    const path = '/api/jobs/' + encodeURIComponent(jobId) + '?customer_id=' + encodeURIComponent(customerProfile.id);
+    
+    await requestJson(path, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    }, 'Deleting job...');
+
+    showToast('Job deleted successfully.', 'success');
+    customerJobs = customerJobs.filter((job) => String(job.id) !== String(jobId));
+    renderJobs();
+  } catch (error) {
+    showRequestError(error);
+  } finally {
+    setButtonLoading(button, false);
+  }
 }
 
 function getInitials(name) {
