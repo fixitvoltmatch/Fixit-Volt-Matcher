@@ -165,28 +165,32 @@ function closeDeleteConfirm() {
 
 async function handleDeleteAccount() {
   const deleteBtn = document.getElementById('confirmDeleteBtn');
-  setButtonLoading(deleteBtn, true, 'Deleting');
+  setButtonLoading(deleteBtn, true, 'Deleting Account');
 
   try {
-    const data = await requestJson(`/api/profile/${getUserId()}`, {
+    await requestJson(`/api/profile/${getUserId()}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
 
-    showToast('Account deleted successfully', 'success');
+    showToast('Account deleted successfully. Redirecting...', 'success');
     
-    // Clear session and redirect
-    window.setTimeout(() => {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('role');
+    // Clear session and redirect to homepage after a short delay
+    setTimeout(() => {
+      localStorage.clear();
       window.location.href = 'index.html';
-    }, 1000);
+    }, 1500);
   } catch (error) {
     closeDeleteConfirm();
-    showRequestError(error);
-  } finally {
     setButtonLoading(deleteBtn, false);
+    
+    if (error.status === 401) {
+      showToast('Session expired. Please login again', 'error');
+    } else if (error.status === 400) {
+      showToast('Failed to delete account. Please try again', 'error');
+    } else {
+      showToast('Error deleting account. Please try again', 'error');
+    }
   }
 }
 

@@ -83,10 +83,13 @@ async function handleLogin(event) {
     showToast('Welcome back!', 'success');
     window.setTimeout(redirectBasedOnRole, 450);
   } catch (error) {
-    if (error.status && error.status !== 401 && error.status < 500 && !error.isNetworkError) {
-      showToast('Invalid email or password', 'error');
+    // Handle login-specific errors
+    if (error.status === 401) {
+      showToast('Incorrect email or password', 'error');
+    } else if (error.status && error.status !== 401 && error.status < 500 && !error.isNetworkError) {
+      showToast('Incorrect email or password', 'error');
     } else {
-      showRequestError(error);
+      showToast('Login failed. Please try again', 'error');
     }
   } finally {
     setButtonLoading(button, false);
