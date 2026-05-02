@@ -168,12 +168,12 @@ async function handleDeleteAccount() {
   setButtonLoading(deleteBtn, true, 'Deleting Account');
 
   try {
-    await requestJson(`/api/profile/${getUserId()}`, {
+    const response = await requestJson(`/api/profile/${getUserId()}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
 
-    showToast('Account deleted successfully. Redirecting...', 'success');
+    showToast('Account deleted successfully. Redirecting to home...', 'success');
     
     // Clear session and redirect to homepage after a short delay
     setTimeout(() => {
@@ -184,12 +184,17 @@ async function handleDeleteAccount() {
     closeDeleteConfirm();
     setButtonLoading(deleteBtn, false);
     
-    if (error.status === 401) {
-      showToast('Session expired. Please login again', 'error');
+    // Provide specific error messages based on status code
+    if (error.status === 401 || error.status === 403) {
+      showToast('Not authorized to delete this account', 'error');
+    } else if (error.status === 404) {
+      showToast('Account not found', 'error');
     } else if (error.status === 400) {
-      showToast('Failed to delete account. Please try again', 'error');
+      showToast('Invalid request. Please try again', 'error');
+    } else if (error.status === 500) {
+      showToast('Server error while deleting account. Please try again later', 'error');
     } else {
-      showToast('Error deleting account. Please try again', 'error');
+      showToast('Failed to delete account. Please try again', 'error');
     }
   }
 }
