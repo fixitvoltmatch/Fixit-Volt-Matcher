@@ -18,33 +18,47 @@ function bindEvents() {
   document.getElementById('deleteModalOverlay').addEventListener('click', closeDeleteConfirm);
   document.getElementById('skillInput').addEventListener('keypress', handleAddSkill);
 
-  Array.from(document.querySelectorAll('#profileForm input[type!="hidden"], #profileForm textarea')).forEach((input) => {
+  const inputs = document.querySelectorAll('#profileForm input:not([type="hidden"]), #profileForm textarea');
+  inputs.forEach((input) => {
     input.addEventListener('input', () => clearFieldError(input));
   });
 }
 
 async function loadProfileData() {
   try {
-    showToast('Loading your profile...', 'info');
     const data = await requestJson('/api/auth/me', {
       method: 'GET',
       headers: getAuthHeaders()
     });
 
-    if (data.user) {
+    if (data && data.user) {
       userProfile = data.user;
-      document.getElementById('email').value = userProfile.email || '';
-      document.getElementById('fullName').value = userProfile.full_name || '';
-      document.getElementById('city').value = userProfile.city || '';
-      document.getElementById('phone').value = userProfile.phone || '';
+      
+      const emailField = document.getElementById('email');
+      const fullNameField = document.getElementById('fullName');
+      const cityField = document.getElementById('city');
+      const phoneField = document.getElementById('phone');
+      
+      if (emailField) emailField.value = userProfile.email || '';
+      if (fullNameField) fullNameField.value = userProfile.full_name || '';
+      if (cityField) cityField.value = userProfile.city || '';
+      if (phoneField) phoneField.value = userProfile.phone || '';
+      
+      updateAvatarDisplay(userProfile.full_name || userProfile.email);
 
       if (userProfile.role === 'electrician' && data.electrician) {
         const electrician = data.electrician;
-        document.getElementById('electricianSection').style.display = 'block';
-        document.getElementById('bio').value = electrician.bio || '';
-        document.getElementById('experience').value = electrician.experience_years || 0;
-        document.getElementById('available').checked = electrician.available !== false;
-        userSkills = electrician.skills || [];
+        const electricianSection = document.getElementById('electricianSection');
+        const bioField = document.getElementById('bio');
+        const experienceField = document.getElementById('experience');
+        const availableField = document.getElementById('available');
+        
+        if (electricianSection) electricianSection.style.display = 'block';
+        if (bioField) bioField.value = electrician.bio || '';
+        if (experienceField) experienceField.value = electrician.experience_years || 0;
+        if (availableField) availableField.checked = electrician.available !== false;
+        
+        userSkills = Array.isArray(electrician.skills) ? electrician.skills : [];
         renderSkills();
       }
     }
@@ -210,4 +224,29 @@ function escapeHtml(text) {
     "'": '&#039;'
   };
   return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+// Generate initials from name
+function getInitials(nameOrEmail) {
+  if (!nameOrEmail) return '?';
+  
+  const trimmed = nameOrEmail.trim();
+  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+  
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  } else if (words.length === 1) {
+    return words[0].substring(0, 2).toUpperCase();
+  }
+  
+  return '?';
+}
+
+// Update avatar display with initials
+function updateAvatarDisplay(nameOrEmail) {
+  const avatar = document.getElementById('profileAvatar');
+  if (avatar) {
+    const initials = getInitials(nameOrEmail);
+    avatar.textContent = initials;
+  }
 }
