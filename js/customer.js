@@ -13,6 +13,8 @@ let customerJobs = [];
 let lastCreatedJob = null;
 let lastMatches = [];
 let availableSkills = [];
+let selectedRating = 0;
+let currentJobForRating = null;
 
 document.addEventListener('DOMContentLoaded', initCustomerDashboard);
 
@@ -27,6 +29,7 @@ async function initCustomerDashboard() {
 
   initializeCityDropdowns();
   bindEvents();
+  bindRatingEvents();
   await loadSkills();
   await loadCustomerProfile();
   await loadElectricians();
@@ -57,6 +60,7 @@ function bindEvents() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeModal();
+      closeRatingModal();
     }
   });
 
@@ -64,6 +68,191 @@ function bindEvents() {
     input.addEventListener('input', () => clearFieldError(input));
     input.addEventListener('change', () => clearFieldError(input));
   });
+}
+
+function bindRatingEvents() {
+  const ratingStars = document.querySelectorAll('.rating-star');
+  const submitBtn = document.getElementById('submitRatingBtn');
+  const ratingModalClose = document.getElementById('ratingModalClose');
+  const ratingModalOverlay = document.getElementById('ratingModalOverlay');
+
+  if (!ratingStars.length || !submitBtn || !ratingModalClose || !ratingModalOverlay) {
+    return;
+  }
+
+  ratingStars.forEach((star) => {
+    star.addEventListener('mouseover', () => {
+      const value = Number(star.dataset.value);
+      updateStarDisplay(value);
+    });
+
+    star.addEventListener('mouseout', () => {
+      updateStarDisplay(selectedRating);
+    });
+
+    star.addEventListener('click', () => {
+      selectedRating = Number(star.dataset.value);
+      updateStarDisplay(selectedRating);
+
+      submitBtn.disabled = false;
+      submitBtn.classList.add('is-active');
+    });
+  });
+
+  submitBtn.addEventListener('click', submitRating);
+
+  ratingModalClose.addEventListener('click', closeRatingModal);
+
+  ratingModalOverlay.addEventListener('click', (event) => {
+    if (event.target.id === 'ratingModalOverlay') {
+      closeRatingModal();
+    }
+  });
+}
+
+function updateStarDisplay(rating) {
+  const stars = document.querySelectorAll('.rating-star');
+
+  stars.forEach((star) => {
+    const starValue = Number(star.dataset.value);
+
+    if (starValue <= rating) {
+      star.classList.add('is-active');
+      star.style.color = '#f97316';
+    } else {
+      star.classList.remove('is-active');
+      star.style.color = '#d1d5db';
+    }
+  });
+}
+
+function openRatingModal(job) {
+  if (!job) {
+    showToast('Could not open rating modal for this job', 'error');
+    return;
+  }
+
+  if (!job.electrician_id) {
+    showToast('This job has no assigned electrician to rate', 'error');
+    return;
+  }
+
+  currentJobForRating = job;
+  selectedRating = 0;
+
+  const overlay = document.getElementById('ratingModalOverlay');
+  const submitBtn = document.getElementById('submitRatingBtn');
+
+  if (!overlay || !submitBtn) {
+    showToast('Rating modal is missing from the page', 'error');
+    return;
+  }
+
+  overlay.setAttribute('aria-hidden', 'false');
+  overlay.style.display = 'flex';
+
+  submitBtn.disabled = true;
+  submitBtn.classList.remove('is-active');
+
+  updateStarDisplay(0);
+}
+
+function closeRatingModal() {
+  const overlay = document.getElementById('ratingModalOverlay');
+
+  if (overlay) {
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.display = 'none';
+  }
+
+  selectedRating = 0;
+  currentJobForRating = null;
+
+  updateStarDisplay(0);
+}
+
+async function submitRating() {
+  if (!currentJobForRating || !selectedRating) {
+    showToast('Please select a rating', 'error');
+    return;
+  }
+
+  const jobBeingRated = currentJobForRating;
+
+  try {
+    await requestJson('/api/ratings', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        job_id: jobBeingRated.id,
+        customer_id: getUserId(),
+        electrician_id: jobBeingRated.electrician_id,
+        stars: selectedRating
+      })
+    }, 'Submitting rating...');
+
+    closeRatingModal();
+
+    const ratingSection = document.getElementById('rating-' + jobBeingRated.id);
+
+    if (ratingSection) {
+      ratingSection.innerHTML = '<span class="badge badge-rated">⭐ Rated</span>';
+    }
+
+    showToast('Thank you for your rating!', 'success');
+
+    await loadJobs();
+    await loadElectricians();
+  } catch (error) {
+    const message = error && (error.error || error.message || error.userMessage);
+
+    if (message === 'Already rated') {
+      showToast('You have already rated this job', 'warning');
+    } else {
+      showToast('Could not submit rating. Try again', 'error');
+    }
+
+    closeRatingModal();
+  }
+}
+
+function createRatedBadge() {
+  const badge = document.createElement('span');
+  badge.className = 'badge badge-rated';
+  badge.textContent = '⭐ Rated';
+  return badge;
+}
+
+function renderStars(rating, totalReviews) {
+  const numericRating = Number(rating || 0);
+  const numericReviews = Number(totalReviews || 0);
+
+  if (!numericRating || numericReviews === 0) {
+    return '<span style="color:#9ca3af;font-size:16px;">No ratings yet</span>';
+  }
+
+  const fullStars = Math.floor(numericRating);
+  const hasHalf = numericRating % 1 >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
+
+  let starsHtml = '<span style="display:inline-flex;align-items:center;gap:2px;font-size:16px;">';
+
+  for (let i = 0; i < fullStars; i += 1) {
+    starsHtml += '<span style="color:#f97316;">★</span>';
+  }
+
+  if (hasHalf) {
+    starsHtml += '<span style="color:#fdba74;">★</span>';
+  }
+
+  for (let i = 0; i < emptyStars; i += 1) {
+    starsHtml += '<span style="color:#d1d5db;">★</span>';
+  }
+
+  starsHtml += '</span>';
+  starsHtml += ' <span style="font-size:16px;">' + numericRating.toFixed(1) + ' (' + numericReviews + ' reviews)</span>';
+
+  return starsHtml;
 }
 
 async function loadSkills() {
@@ -239,6 +428,7 @@ function electricianCardHtml(electrician) {
   const visibleSkills = skills.slice(0, 4);
   const hiddenCount = Math.max(0, skills.length - visibleSkills.length);
   const rating = Number(electrician.rating || 0);
+  const totalReviews = Number(electrician.total_reviews || 0);
   const available = electrician.available !== false;
 
   return [
@@ -251,7 +441,7 @@ function electricianCardHtml(electrician) {
     '    </div>',
     '  </div>',
     '  <div class="tag-list">' + visibleSkills.map(skillTagHtml).join('') + (hiddenCount ? skillTagHtml('+' + hiddenCount + ' more') : '') + '</div>',
-    '  <div class="rating" aria-label="Rating ' + escapeHtml(rating.toFixed(1)) + ' out of 5">' + starRating(rating) + ' <span class="muted">(' + escapeHtml(String(electrician.total_reviews || 0)) + ')</span></div>',
+    '  <div class="rating" aria-label="Rating ' + escapeHtml(rating.toFixed(1)) + ' out of 5">' + renderStars(rating, totalReviews) + '</div>',
     '  <p class="muted">' + escapeHtml(electrician.experience_years || 0) + ' years of experience</p>',
     '  <span class="badge ' + (available ? 'badge-available' : 'badge-unavailable') + '">' + (available ? 'Available' : 'Unavailable') + '</span>',
     '  <div class="card-actions">',
@@ -292,6 +482,8 @@ function renderJobs() {
   list.querySelectorAll('[data-action="job-delete"]').forEach((button) => {
     button.addEventListener('click', () => deleteJob(button.dataset.id, button));
   });
+
+  updateJobRatingStates();
 }
 
 function jobCardHtml(job) {
@@ -306,9 +498,12 @@ function jobCardHtml(job) {
   const deleteButton = status === 'pending' || status === 'matched'
     ? '<button class="btn-danger" type="button" data-action="job-delete" data-id="' + escapeHtml(job.id) + '">Delete</button>'
     : '';
+  const ratingSection = status === 'completed' && job.electrician_id
+    ? '<div class="job-rating-section" id="rating-' + escapeHtml(job.id) + '"></div>'
+    : '';
 
   return [
-    '<article class="card job-card">',
+    '<article class="card job-card" data-job-id="' + escapeHtml(job.id) + '">',
     '  <div>',
     '    <h3 class="card-title">' + escapeHtml(job.title || 'Electrical job') + '</h3>',
     '    <p class="muted">' + escapeHtml(formatRelativeTime(job.created_at)) + '</p>',
@@ -320,6 +515,7 @@ function jobCardHtml(job) {
     '  </div>',
     assignedLine,
     '  <p class="muted line-clamp">' + escapeHtml(job.ai_explanation || job.description || 'No AI explanation available yet.') + '</p>',
+    ratingSection,
     '  <div class="card-actions">',
     chatButton,
     '    <button class="btn-secondary" type="button" data-action="job-details" data-id="' + escapeHtml(job.id) + '">View Details</button>',
@@ -327,6 +523,55 @@ function jobCardHtml(job) {
     '  </div>',
     '</article>'
   ].join('');
+}
+
+async function checkJobRatedStatus(jobId) {
+  try {
+    const response = await requestJson('/api/ratings/check/' + encodeURIComponent(jobId), {
+      method: 'GET',
+      headers: getAuthHeaders()
+    }, 'Checking rating...');
+
+    const ratingSection = document.getElementById('rating-' + jobId);
+
+    if (!ratingSection) {
+      return;
+    }
+
+    if (response.rated === true) {
+      ratingSection.innerHTML = '<span class="badge badge-rated">⭐ Rated</span>';
+      return;
+    }
+
+    const job = findJob(jobId);
+
+    if (!job) {
+      return;
+    }
+
+    const button = document.createElement('button');
+    button.className = 'btn-secondary btn-orange';
+    button.textContent = 'Rate Electrician';
+    button.type = 'button';
+    button.dataset.action = 'rate-electrician';
+    button.dataset.id = jobId;
+    button.addEventListener('click', () => openRatingModal(job));
+
+    ratingSection.innerHTML = '';
+    ratingSection.appendChild(button);
+  } catch (error) {
+    console.error('Error checking rating status:', error);
+  }
+}
+
+async function updateJobRatingStates() {
+  const completedJobs = customerJobs.filter((job) => {
+    return normalizeStatus(job.status) === 'completed' && job.electrician_id;
+  });
+
+  for (const job of completedJobs) {
+    await checkJobRatedStatus(job.id);
+  }
 }
 
 function renderAiResults(result) {
@@ -650,6 +895,9 @@ function openProfileModal(electrician) {
   }
 
   const available = electrician.available !== false;
+  const rating = Number(electrician.rating || 0);
+  const totalReviews = Number(electrician.total_reviews || 0);
+
   openModal([
     '<h2 id="modalTitle">' + escapeHtml(getElectricianName(electrician)) + '</h2>',
     '<div class="detail-list">',
@@ -658,7 +906,7 @@ function openProfileModal(electrician) {
     detailRow('Email', electrician.email || 'Not listed'),
     detailRow('Skills', '<div class="tag-list">' + getSkills(electrician).map(skillTagHtml).join('') + '</div>', true),
     detailRow('Bio', electrician.bio || 'No bio provided.'),
-    detailRow('Rating', starRating(Number(electrician.rating || 0)) + ' (' + escapeHtml(String(electrician.total_reviews || 0)) + ' reviews)', true),
+    detailRow('Rating', renderStars(rating, totalReviews), true),
     detailRow('Experience', (electrician.experience_years || 0) + ' years'),
     detailRow('Status', '<span class="badge ' + (available ? 'badge-available' : 'badge-unavailable') + '">' + (available ? 'Available' : 'Unavailable') + '</span>', true),
     '</div>'
@@ -956,7 +1204,7 @@ async function deleteJob(jobId, button) {
 
   try {
     const path = '/api/jobs/' + encodeURIComponent(jobId) + '?customer_id=' + encodeURIComponent(customerProfile.id);
-    
+
     await requestJson(path, {
       method: 'DELETE',
       headers: getAuthHeaders()
