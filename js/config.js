@@ -2,9 +2,84 @@
   ORCHESTRATOR_URL: 'https://fixit-volt-matcher-fixit-orchestrator.hf.space'
 };
 
+const PAKISTAN_CITIES = [
+  'Karachi',  'Lahore',  'Islamabad',  'Rawalpindi',  'Faisalabad',  'Multan',
+  'Peshawar',  'Quetta',  'Sialkot',  'Gujranwala',  'Hyderabad',  'Bahawalpur',  'Sargodha',
+  'Sukkur',  'Larkana',  'Sheikhupura',  'Rahim Yar Khan',  'Jhang',  'Gujrat',
+  'Kasur',  'Mardan',  'Mingora',  'Nawabshah',  'Sahiwal',  'Mirpur Khas',  'Okara',  'Mandi Bahauddin',
+  'Abbottabad',  'Turbat',  'Muzaffarabad',  'Attock',  'Chakwal',  'Jhelum',  'Narowal',  'Hafizabad',  'Pakpattan',  'Khanewal',
+  'Lodhran',  'Vehari',  'Bahawalnagar',  'Rahimyar Khan',  'Sadiqabad',  'Dera Ghazi Khan',  'Rajanpur',  'Fort Abbas',
+  'Rohri',  'Shikarpur',  'Ghotki',  'Kandyar',  'Dadu',  'Jamshoro',  'Thatta',  'Badin',
+  'Umerkot',  'Tharparkar',  'Matiari',  'Tando Muhammad Khan',  'Tando Allahyar',  'Sanghar',  'Khairpur',  'Jacobabad',
+  'Kashmore',  'Vihari',  'Swat',  'Saidu Swat',  'Buner',  'Charsadda',  'Nowshera',  'Kohat',  'Karak',  'Hangu',
+  'Bannu',  'Lakki Marwat',  'Dera Ismail Khan',  'Tank',  'Waziristan',  'Miram Shah',  'Razmak',  'Gilgit',  'Skardu',
+  'Kharmang',  'Shigar',  'Khaplu',  'Galtimehr',  'Deosai',  'Shogran',  'Naran',  'Kaghan',  'Mansehra',  'Battagram',  'Kohistan',  'Haripur',
+  'Havelian',  'Taxila',  'Murree',  'Rawalpindi Cantt',  'Pishin',  'Qila Saifullah',  'Killa Abdullah',
+  'Chaman',  'Zhob',  'Loralai',  'Barkhan',
+  'Fort Munro',  'Kalat',  'Mastung',  'Nushki',  'Khuzdar',  'Panjgur',  'Kech',  'Awaran',  'Gwadar',  'Ormara',
+  'Gawadar',  'Nasirabad',  'Sibi',  'Harnai',  'Ziarat',  'Bhawalpur',  'Surendupally',
+  'Naushahro Feroze',  'Sajawal',  'Mirpur',  'Kotri',  'Sehwan',  'Bagamoyo',  'Other'
+];
+
+CONFIG.PAKISTAN_CITIES = PAKISTAN_CITIES;
+
 // Shared runtime configuration and browser-only utilities.
 // The frontend talks only to the orchestrator; internal service tokens never belong here.
 window.CONFIG = CONFIG;
+
+function normalizeCityName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function cityOptionsHtml(selectedValue = '') {
+  const normalizedSelected = normalizeCityName(selectedValue);
+
+  return [
+    '<option value="" disabled' + (!normalizedSelected ? ' selected' : '') + '>Select your city</option>',
+    PAKISTAN_CITIES.map((city) => {
+      const selected = normalizeCityName(city) === normalizedSelected ? ' selected' : '';
+      return '<option value="' + escapeHtmlShared(city) + '"' + selected + '>' + escapeHtmlShared(city) + '</option>';
+    }).join('')
+  ].join('');
+}
+
+function populateCitySelect(select, selectedValue = '') {
+  if (!select) {
+    return;
+  }
+
+  select.innerHTML = cityOptionsHtml(selectedValue);
+  setCitySelectValue(select, selectedValue);
+}
+
+function setCitySelectValue(select, value) {
+  if (!select) {
+    return;
+  }
+
+  const normalized = normalizeCityName(value);
+
+  if (!normalized) {
+    select.value = '';
+    return;
+  }
+
+  const matchedOption = Array.from(select.options).find((option) => normalizeCityName(option.value) === normalized);
+
+  if (matchedOption) {
+    select.value = matchedOption.value;
+    return;
+  }
+
+  const otherOption = Array.from(select.options).find((option) => option.value === 'Other');
+  select.value = otherOption ? 'Other' : '';
+}
+
+function initializeCityDropdowns(root = document) {
+  root.querySelectorAll('select[data-city-select="true"]').forEach((select) => {
+    populateCitySelect(select, select.dataset.selectedCity || select.value || '');
+  });
+}
 
 // Apply the persisted theme before the rest of the UI initializes to avoid a flash.
 
@@ -197,15 +272,34 @@ function initMobileNav() {
         return;
       }
 
-      if (target.dataset.mobileSourceId === 'logoutBtn') {
+      const mobileSourceId = target.dataset.mobileSourceId;
+
+      if (mobileSourceId === 'logoutBtn') {
         logout();
         return;
       }
 
-      if (target.dataset.mobileSourceId === 'backBtn' || target.dataset.mobileBack === 'true') {
+      if (mobileSourceId === 'backBtn' || target.dataset.mobileBack === 'true') {
         const backButton = document.getElementById('backBtn');
         if (backButton) {
           backButton.click();
+        }
+        setMobileMenuOpen(container, false);
+        return;
+      }
+
+      if (mobileSourceId) {
+        const original = document.getElementById(mobileSourceId);
+        if (original) {
+          original.click();
+          setMobileMenuOpen(container, false);
+          return;
+        }
+
+        if (mobileSourceId === 'profileBtn') {
+          window.location.href = 'profile.html';
+          setMobileMenuOpen(container, false);
+          return;
         }
       }
 
@@ -438,7 +532,7 @@ async function requestApi(path, options = {}, loadingMessage = 'Loading...', set
     const data = await parseApiResponse(response);
 
     if (!response.ok) {
-      if (response.status === 401 && !settings.public) {  
+      if (response.status === 401 && !settings.public) {
         handleSessionExpired();
       }
       throw createApiError(response, data);
@@ -453,7 +547,6 @@ async function requestApi(path, options = {}, loadingMessage = 'Loading...', set
     }
   }
 }
-
 
 function setButtonLoading(button, isLoading, loadingText) {
   if (!button) {
@@ -655,6 +748,6 @@ function initPageFade() {
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   initMobileNav();
+  initializeCityDropdowns();
   initPageFade();
 });
-

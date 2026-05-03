@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', initRegistrationPage);
 
 // Bootstrapping keeps URL defaults and event wiring in one predictable place.
 function initRegistrationPage() {
+  initializeCityDropdowns();
+
   const params = new URLSearchParams(window.location.search);
   const requestedRole = params.get('role');
 
@@ -32,8 +34,9 @@ function initRegistrationPage() {
   otpForm.addEventListener('submit', handleVerifyOtp);
   resendCodeBtn.addEventListener('click', handleResendCode);
 
-  Array.from(document.querySelectorAll('#registerForm input, #registerForm textarea, #otpForm input')).forEach((input) => {
+  Array.from(document.querySelectorAll('#registerForm input, #registerForm textarea, #registerForm select, #otpForm input')).forEach((input) => {
     input.addEventListener('input', () => clearFieldError(input));
+    input.addEventListener('change', () => clearFieldError(input));
   });
 
   loadSkills();
@@ -165,7 +168,7 @@ function validateRegistrationForm() {
 }
 
 function setFormDisabled(form, isDisabled) {
-  Array.from(form.querySelectorAll('button, input, textarea')).forEach((element) => {
+  Array.from(form.querySelectorAll('button, input, textarea, select')).forEach((element) => {
     element.disabled = isDisabled;
   });
 }

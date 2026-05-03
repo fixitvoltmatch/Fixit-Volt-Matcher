@@ -6,6 +6,7 @@
   <meta name="description" content="Create a Fixit Volt Matcher account as a customer or electrician.">
   <title>Register - Fixit Volt Matcher</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ui-enhancements.css">
   <script src="js/config.js"></script>
 </head>
 <body>
@@ -59,7 +60,9 @@
 
             <div class="form-group full-width">
               <label for="city">City</label>
-              <input type="text" id="city" name="city" autocomplete="address-level2" required>
+              <select id="city" name="city" autocomplete="address-level2" data-city-select="true" required>
+                <option value="" disabled selected>Select your city</option>
+              </select>
             </div>
           </div>
 

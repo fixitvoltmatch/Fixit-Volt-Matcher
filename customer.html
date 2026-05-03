@@ -6,6 +6,7 @@
   <meta name="description" content="Fixit Volt Matcher customer dashboard for finding electricians, posting jobs, and chatting.">
   <title>Customer Dashboard - Fixit Volt Matcher</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ui-enhancements.css">
   <script src="js/config.js"></script>
 </head>
 <body>
@@ -42,7 +43,9 @@
       <div class="card filter-bar">
         <div class="form-group">
           <label for="cityFilter">City</label>
-          <input type="text" id="cityFilter" placeholder="Search by city">
+          <select id="cityFilter" data-city-select="true" required>
+            <option value="" disabled selected>Select your city</option>
+          </select>
         </div>
         <div class="form-group">
           <label for="skillFilter">Skill</label>
@@ -76,7 +79,9 @@
 
           <div class="form-group">
             <label for="jobCity">City</label>
-            <input type="text" id="jobCity" required>
+            <select id="jobCity" data-city-select="true" required>
+              <option value="" disabled selected>Select your city</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -143,7 +148,7 @@
 
   <template id="quickAiImageUploadTemplate">
     <div class="form-group">
-      <label class="btn-secondary btn-full quick-image-trigger" for="quickAiImage">Attach Image (optional)</label>
+      <label class="btn-secondary btn-full quick-image-trigger" for="quickAiImage">📷 Attach Image (optional)</label>
       <input class="hidden" type="file" id="quickAiImage" accept="image/*">
       <div class="image-preview-wrap" id="quickImagePreviewWrap">
         <img class="image-preview" id="quickImagePreview" alt="Selected electrical issue preview">
@@ -167,5 +172,3 @@
   <script src="js/customer.js"></script>
 </body>
 </html>
-
-

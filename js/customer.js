@@ -25,6 +25,7 @@ async function initCustomerDashboard() {
     return;
   }
 
+  initializeCityDropdowns();
   bindEvents();
   await loadSkills();
   await loadCustomerProfile();
@@ -59,8 +60,9 @@ function bindEvents() {
     }
   });
 
-  Array.from(document.querySelectorAll('#jobForm input, #jobForm textarea')).forEach((input) => {
+  Array.from(document.querySelectorAll('#jobForm input, #jobForm textarea, #jobForm select')).forEach((input) => {
     input.addEventListener('input', () => clearFieldError(input));
+    input.addEventListener('change', () => clearFieldError(input));
   });
 }
 
@@ -150,8 +152,8 @@ async function loadCustomerProfile() {
     customerProfile = data.user || null;
 
     if (customerProfile && customerProfile.city) {
-      document.getElementById('jobCity').value = customerProfile.city;
-      document.getElementById('cityFilter').value = customerProfile.city;
+      setCitySelectValue(document.getElementById('jobCity'), customerProfile.city);
+      setCitySelectValue(document.getElementById('cityFilter'), customerProfile.city);
     }
   } catch (error) {
     showRequestError(error);
@@ -637,7 +639,7 @@ function resetPostForm() {
   document.getElementById('aiResults').innerHTML = '';
 
   if (customerProfile && customerProfile.city) {
-    document.getElementById('jobCity').value = customerProfile.city;
+    setCitySelectValue(document.getElementById('jobCity'), customerProfile.city);
   }
 }
 
@@ -688,6 +690,7 @@ function openJobDetailsModal(job) {
 
 function openAiFinderModal() {
   const imageUploadTemplate = document.getElementById('quickAiImageUploadTemplate');
+  const selectedCity = (customerProfile && customerProfile.city) || '';
 
   openModal([
     '<h2 id="modalTitle">AI Electrician Finder</h2>',
@@ -699,13 +702,17 @@ function openAiFinderModal() {
     '  </div>',
     '  <div class="form-group">',
     '    <label for="quickCity">City</label>',
-    '    <input type="text" id="quickCity" required value="' + escapeHtml((customerProfile && customerProfile.city) || '') + '">',
+    '    <select id="quickCity" data-city-select="true" required data-selected-city="' + escapeHtml(selectedCity) + '">',
+    cityOptionsHtml(selectedCity),
+    '    </select>',
     '  </div>',
     imageUploadTemplate ? imageUploadTemplate.innerHTML : '',
     '  <button class="btn-primary btn-full" id="quickAiSubmitBtn" type="submit">Find Best Match</button>',
     '</form>',
     '<div class="modal-matches" id="quickAiResults"></div>'
   ].join(''), false);
+
+  setCitySelectValue(document.getElementById('quickCity'), selectedCity);
 
   document.getElementById('quickAiForm').addEventListener('submit', handleQuickAiSubmit);
   const quickImage = document.getElementById('quickAiImage');
@@ -718,8 +725,10 @@ function openAiFinderModal() {
   if (quickRemoveImage) {
     quickRemoveImage.addEventListener('click', clearQuickImagePreview);
   }
-  Array.from(document.querySelectorAll('#quickAiForm textarea, #quickAiForm input')).forEach((field) => {
+
+  Array.from(document.querySelectorAll('#quickAiForm textarea, #quickAiForm input, #quickAiForm select')).forEach((field) => {
     field.addEventListener('input', () => clearFieldError(field));
+    field.addEventListener('change', () => clearFieldError(field));
   });
 }
 
@@ -1009,5 +1018,3 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
-
-

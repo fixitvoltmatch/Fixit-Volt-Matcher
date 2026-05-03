@@ -6,6 +6,7 @@
   <meta name="description" content="Fixit Volt Matcher job chat.">
   <title>Chat - Fixit Volt Matcher</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ui-enhancements.css">
   <script src="js/config.js"></script>
 </head>
 <body class="chat-page-body">
@@ -31,7 +32,24 @@
     <div class="chat-input-area">
       <form class="chat-form" id="messageForm" novalidate>
         <label class="hidden" for="messageInput">Message</label>
-        <textarea id="messageInput" placeholder="Type your message..." required></textarea>
+        <textarea id="messageInput" placeholder="Type your message..."></textarea>
+
+        <div class="chat-attachment-area">
+          <button class="chat-image-btn" id="chatImageTrigger" type="button" title="Attach image (optional)" aria-label="Attach image">📷</button>
+          <input class="hidden" type="file" id="chatImageInput" accept="image/*">
+
+          <div class="chat-image-preview-wrap" id="chatImagePreviewWrap">
+            <img class="chat-image-preview" id="chatImagePreview" alt="Selected chat image preview">
+            <div class="image-preview-meta">
+              <div class="image-preview-text">
+                <span class="image-preview-name" id="chatImagePreviewName"></span>
+                <span class="image-preview-size" id="chatImagePreviewSize"></span>
+              </div>
+              <button class="image-remove-btn" id="chatRemoveImageBtn" type="button" aria-label="Remove selected image">&times;</button>
+            </div>
+          </div>
+        </div>
+
         <button class="btn-primary" id="sendBtn" type="submit">Send</button>
       </form>
     </div>
@@ -39,5 +57,3 @@
   <script src="js/chat.js"></script>
 </body>
 </html>
-
-

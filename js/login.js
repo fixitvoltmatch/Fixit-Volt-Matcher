@@ -70,9 +70,17 @@ async function handleLogin(event) {
       body: JSON.stringify({ email, password })
     }, 'Logging in...');
 
+    // Validate that critical fields are present
+    if (!data.userId) {
+      throw new Error('Login response missing userId');
+    }
+    if (!data.role) {
+      throw new Error('Login response missing role');
+    }
+
     localStorage.setItem('accessToken', data.accessToken || '');
-    localStorage.setItem('userId', data.userId || '');
-    localStorage.setItem('role', data.role || '');
+    localStorage.setItem('userId', data.userId);
+    localStorage.setItem('role', data.role);
 
     if (document.getElementById('rememberMe').checked) {
       localStorage.setItem('rememberedEmail', email);
@@ -89,7 +97,7 @@ async function handleLogin(event) {
     } else if (error.status && error.status !== 401 && error.status < 500 && !error.isNetworkError) {
       showToast('Incorrect email or password', 'error');
     } else {
-      showToast('Login failed. Please try again', 'error');
+      showToast(error.message || 'Login failed. Please try again', 'error');
     }
   } finally {
     setButtonLoading(button, false);

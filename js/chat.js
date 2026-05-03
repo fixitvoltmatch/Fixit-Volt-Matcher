@@ -7,6 +7,12 @@ const MESSAGE_POLL_INTERVAL_MS = 2500;
 const messagesArea = document.getElementById('messagesArea');
 const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
+const chatImageInput = document.getElementById('chatImageInput');
+const chatImagePreviewWrap = document.getElementById('chatImagePreviewWrap');
+const chatImagePreview = document.getElementById('chatImagePreview');
+const chatImagePreviewName = document.getElementById('chatImagePreviewName');
+const chatImagePreviewSize = document.getElementById('chatImagePreviewSize');
+const chatRemoveImageBtn = document.getElementById('chatRemoveImageBtn');
 
 let jobId = '';
 let electricianId = '';
@@ -42,6 +48,20 @@ async function initChatPage() {
   messageInput.addEventListener('keydown', handleMessageKeydown);
   messageInput.addEventListener('input', () => clearFieldError(messageInput));
 
+  // Image attachment handlers
+  const chatImageBtn = document.getElementById('chatImageTrigger');
+  if (chatImageBtn) {
+    chatImageBtn.addEventListener('click', () => chatImageInput.click());
+  }
+
+  if (chatImageInput) {
+    chatImageInput.addEventListener('change', handleChatImagePreview);
+  }
+
+  if (chatRemoveImageBtn) {
+    chatRemoveImageBtn.addEventListener('click', clearChatImagePreview);
+  }
+
   await loadJobDetails();
   await loadMessages();
   startMessagePolling();
@@ -66,6 +86,38 @@ async function requestJson(path, options, loadingMessage) {
 
 async function requestJsonQuiet(path, options) {
   return requestApi(path, options, 'Loading...', { silent: true });
+}
+
+async function requestMessageFormData(formData) {
+  const token = beginApiFeedback('Sending message...');
+
+  try {
+    const response = await fetch(apiUrl('/api/messages'), {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + getToken()
+        // Browser automatically sets Content-Type: multipart/form-data with boundary
+      },
+      body: formData
+    });
+
+    const data = await parseApiResponse(response);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        handleSessionExpired();
+      }
+      throw createApiError(response, data);
+    }
+
+    return data;
+  } catch (error) {
+    throw normalizeNetworkError(error);
+  } finally {
+    if (token) {
+      endApiFeedback(token);
+    }
+  }
 }
 
 function showRequestError(error) {
@@ -270,11 +322,38 @@ function appendMessage(msg) {
   const row = document.createElement('div');
   const bubble = document.createElement('div');
   const meta = document.createElement('div');
+  const imageUrl = getMessageImageUrl(msg);
+  const text = msg.content || '';
 
   row.id = 'msg-' + msg.id;
   row.className = 'chat-bubble-row ' + (isMine ? 'mine' : 'other');
   bubble.className = 'chat-bubble ' + (isMine ? 'chat-bubble-mine' : 'chat-bubble-other');
-  bubble.textContent = msg.content || '';
+
+  if (imageUrl) {
+    const imageLink = document.createElement('a');
+    const image = document.createElement('img');
+
+    imageLink.href = imageUrl;
+    imageLink.target = '_blank';
+    imageLink.rel = 'noopener noreferrer';
+    image.className = 'chat-message-image';
+    image.src = imageUrl;
+    image.alt = 'Attached chat image';
+    imageLink.appendChild(image);
+    bubble.appendChild(imageLink);
+  }
+
+  if (text) {
+    const textNode = document.createElement('div');
+    textNode.className = imageUrl ? 'chat-message-text has-image' : 'chat-message-text';
+    textNode.textContent = text;
+    bubble.appendChild(textNode);
+  }
+
+  if (!imageUrl && !text) {
+    bubble.textContent = '';
+  }
+
   meta.className = 'chat-time';
   meta.textContent = formatRelativeTime(msg.created_at);
 
@@ -288,13 +367,14 @@ function appendMessage(msg) {
   scrollToBottom();
 }
 
-function appendOptimisticMessage(content) {
+function appendOptimisticMessage(content, imageUrl) {
   const tempId = 'temp-' + Date.now();
 
   appendMessage({
     id: tempId,
     sender_id: getUserId(),
     content,
+    image_url: imageUrl || '',
     created_at: new Date().toISOString(),
     deliveryStatus: 'pending'
   });
@@ -320,6 +400,33 @@ function markMessageSent(tempId, message) {
 
   if (realMessage.id) {
     tempRow.id = 'msg-' + realMessage.id;
+    
+    // If server returned a real image URL, update the message to use it
+    if (realMessage.image_url && realMessage.image_url !== '') {
+      const bubble = tempRow.querySelector('.chat-bubble');
+      const existingImage = bubble.querySelector('img.chat-message-image');
+      
+      if (existingImage) {
+        // Update image with real URL from server
+        existingImage.src = realMessage.image_url;
+        const imageLink = existingImage.parentElement;
+        if (imageLink && imageLink.tagName === 'A') {
+          imageLink.href = realMessage.image_url;
+        }
+      } else if (!bubble.querySelector('img')) {
+        // If no image element exists but server has image_url, create it
+        const imageLink = document.createElement('a');
+        const image = document.createElement('img');
+        imageLink.href = realMessage.image_url;
+        imageLink.target = '_blank';
+        imageLink.rel = 'noopener noreferrer';
+        image.className = 'chat-message-image';
+        image.src = realMessage.image_url;
+        image.alt = 'Attached chat image';
+        imageLink.appendChild(image);
+        bubble.insertBefore(imageLink, bubble.firstChild);
+      }
+    }
   }
 
   updateMessageStatus(tempRow, 'sent', realMessage.created_at);
@@ -400,30 +507,68 @@ async function handleSendMessage(event) {
   event.preventDefault();
 
   const content = messageInput.value.trim();
+  const image = chatImageInput ? chatImageInput.files[0] : null;
 
-  if (!content) {
-    setFieldError(messageInput, 'Message is required.');
+  if (!content && !image) {
+    setFieldError(messageInput, 'Message or image is required.');
+    return;
+  }
+
+  // Validate required fields before sending
+  const senderId = getUserId();
+  if (!senderId) {
+    showToast('Session expired. Please log in again.', 'error');
+    window.setTimeout(() => window.location.href = 'login.html', 1500);
+    return;
+  }
+
+  if (!jobId) {
+    showToast('Unable to send message: Invalid job ID.', 'error');
     return;
   }
 
   clearFieldError(messageInput);
-  const tempId = appendOptimisticMessage(content);
+
+  const optimisticImageUrl = image ? URL.createObjectURL(image) : '';
+  const tempId = appendOptimisticMessage(content, optimisticImageUrl);
+
   messageInput.value = '';
   messageInput.focus();
 
   try {
-    const data = await requestJsonQuiet('/api/messages', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        job_id: jobId,
-        sender_id: getUserId(),
-        content
-      })
-    });
+    let data;
+
+    if (image) {
+      const formData = new FormData();
+      formData.append('job_id', jobId);
+      formData.append('sender_id', senderId);
+      formData.append('content', content);
+      formData.append('image', image);
+
+      data = await requestMessageFormData(formData);
+      clearChatImagePreview();
+    } else {
+      data = await requestJsonQuiet('/api/messages', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          job_id: jobId,
+          sender_id: senderId,
+          content
+        })
+      });
+    }
 
     if (data.message) {
       markMessageSent(tempId, data.message);
+      
+      // If message had an image, reload messages silently to ensure real image_url is displayed
+      // This prevents stale blob URLs that disappear on refresh
+      if (image) {
+        window.setTimeout(async () => {
+          await loadMessages({ silent: true });
+        }, 500);
+      }
     }
   } catch (error) {
     removeMessageById(tempId);
@@ -440,6 +585,71 @@ function handleMessageKeydown(event) {
   }
 }
 
+function handleChatImagePreview() {
+  const file = chatImageInput ? chatImageInput.files[0] : null;
+
+  if (!file) {
+    clearChatImagePreview();
+    return;
+  }
+
+  if (chatImagePreview) {
+    chatImagePreview.src = URL.createObjectURL(file);
+  }
+
+  if (chatImagePreviewName) {
+    chatImagePreviewName.textContent = file.name;
+  }
+
+  if (chatImagePreviewSize) {
+    chatImagePreviewSize.textContent = formatFileSize(file.size);
+  }
+
+  if (chatImagePreviewWrap) {
+    chatImagePreviewWrap.classList.add('is-visible');
+  }
+
+  if (chatImagePreview) {
+    chatImagePreview.classList.add('is-visible');
+  }
+
+  clearFieldError(messageInput);
+}
+
+function clearChatImagePreview() {
+  if (chatImageInput) {
+    chatImageInput.value = '';
+  }
+
+  if (chatImagePreviewWrap) {
+    chatImagePreviewWrap.classList.remove('is-visible');
+  }
+
+  if (chatImagePreview) {
+    chatImagePreview.classList.remove('is-visible');
+    chatImagePreview.removeAttribute('src');
+  }
+
+  if (chatImagePreviewName) {
+    chatImagePreviewName.textContent = '';
+  }
+
+  if (chatImagePreviewSize) {
+    chatImagePreviewSize.textContent = '';
+  }
+}
+
+function getMessageImageUrl(msg) {
+  return msg.image_url ||
+    msg.imageUrl ||
+    msg.attachment_url ||
+    msg.attachmentUrl ||
+    msg.file_url ||
+    msg.fileUrl ||
+    msg.image ||
+    '';
+}
+
 // Formatting helpers keep status labels stable for the fixed chat header.
 function normalizeStatus(status) {
   const value = String(status || 'pending').toLowerCase();
@@ -451,5 +661,3 @@ function toTitleCase(value) {
     .replace(/[_-]/g, ' ')
     .replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 }
-
-

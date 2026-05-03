@@ -6,6 +6,7 @@
   <meta name="description" content="Manage your Fixit Volt Matcher profile.">
   <title>Profile - Fixit Volt Matcher</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ui-enhancements.css">
   <script src="js/config.js"></script>
 </head>
 <body>
@@ -36,7 +37,6 @@
         </div>
 
         <form id="profileForm" novalidate>
-          <!-- User Basic Info -->
           <div class="form-section">
             <h2>Basic Information</h2>
             
@@ -52,7 +52,9 @@
 
             <div class="form-group">
               <label for="city">City</label>
-              <input type="text" id="city" name="city" placeholder="Your city" required>
+              <select id="city" name="city" data-city-select="true" required>
+                <option value="" disabled selected>Select your city</option>
+              </select>
             </div>
 
             <div class="form-group">
@@ -61,7 +63,6 @@
             </div>
           </div>
 
-          <!-- Electrician-only fields -->
           <div class="form-section" id="electricianSection" style="display: none;">
             <h2>Professional Information</h2>
 

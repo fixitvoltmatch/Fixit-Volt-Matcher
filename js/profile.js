@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', initProfilePage);
 
 async function initProfilePage() {
   redirectIfNotLoggedIn();
+  initializeCityDropdowns();
   bindEvents();
   await loadProfileData();
 }
@@ -18,9 +19,10 @@ function bindEvents() {
   document.getElementById('deleteModalOverlay').addEventListener('click', closeDeleteConfirm);
   document.getElementById('skillInput').addEventListener('keypress', handleAddSkill);
 
-  const inputs = document.querySelectorAll('#profileForm input:not([type="hidden"]), #profileForm textarea');
+  const inputs = document.querySelectorAll('#profileForm input:not([type="hidden"]), #profileForm textarea, #profileForm select');
   inputs.forEach((input) => {
     input.addEventListener('input', () => clearFieldError(input));
+    input.addEventListener('change', () => clearFieldError(input));
   });
 }
 
@@ -41,7 +43,7 @@ async function loadProfileData() {
       
       if (emailField) emailField.value = userProfile.email || '';
       if (fullNameField) fullNameField.value = userProfile.full_name || '';
-      if (cityField) cityField.value = userProfile.city || '';
+      if (cityField) setCitySelectValue(cityField, userProfile.city || '');
       if (phoneField) phoneField.value = userProfile.phone || '';
       
       updateAvatarDisplay(userProfile.full_name || userProfile.email);
@@ -141,7 +143,7 @@ async function handleProfileUpdate(event) {
   setButtonLoading(saveBtn, true, 'Saving');
 
   try {
-    const data = await requestJson(`/api/profile/${getUserId()}`, {
+    await requestJson(`/api/profile/${getUserId()}`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
       body: JSON.stringify(updates)
@@ -168,14 +170,13 @@ async function handleDeleteAccount() {
   setButtonLoading(deleteBtn, true, 'Deleting Account');
 
   try {
-    const response = await requestJson(`/api/profile/${getUserId()}`, {
+    await requestJson(`/api/profile/${getUserId()}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
 
     showToast('Account deleted successfully. Redirecting to home...', 'success');
     
-    // Clear session and redirect to homepage after a short delay
     setTimeout(() => {
       localStorage.clear();
       window.location.href = 'index.html';
@@ -184,7 +185,6 @@ async function handleDeleteAccount() {
     closeDeleteConfirm();
     setButtonLoading(deleteBtn, false);
     
-    // Provide specific error messages based on status code
     if (error.status === 401 || error.status === 403) {
       showToast('Not authorized to delete this account', 'error');
     } else if (error.status === 404) {
@@ -209,12 +209,10 @@ function goBack() {
   }
 }
 
-// Request helper
 async function requestJson(path, options, loadingMessage) {
   return requestApi(path, options, loadingMessage || 'Loading...');
 }
 
-// Validation helper
 function validateField(field, message) {
   if (!field.value.trim()) {
     setFieldError(field, message);
@@ -223,7 +221,6 @@ function validateField(field, message) {
   return true;
 }
 
-// HTML escape helper
 function escapeHtml(text) {
   const map = {
     '&': '&amp;',
@@ -232,10 +229,9 @@ function escapeHtml(text) {
     '"': '&quot;',
     "'": '&#039;'
   };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
+  return String(text ?? '').replace(/[&<>"']/g, (m) => map[m]);
 }
 
-// Generate initials from name
 function getInitials(nameOrEmail) {
   if (!nameOrEmail) return '?';
   
@@ -251,7 +247,6 @@ function getInitials(nameOrEmail) {
   return '?';
 }
 
-// Update avatar display with initials
 function updateAvatarDisplay(nameOrEmail) {
   const avatar = document.getElementById('profileAvatar');
   if (avatar) {
