@@ -1,4 +1,4 @@
-﻿const SUPABASE_URL = 'https://zthgrdpebfhxssrzuipn.supabase.co';
+const SUPABASE_URL = 'https://zthgrdpebfhxssrzuipn.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_0Nx_I-pahy66Zbpa0UXUQQ_osJpIIM6';
 
 const SUPABASE_CDN_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
@@ -51,7 +51,27 @@ async function initChatPage() {
   // Image attachment handlers
   const chatImageBtn = document.getElementById('chatImageTrigger');
   if (chatImageBtn) {
-    chatImageBtn.addEventListener('click', () => chatImageInput.click());
+    chatImageBtn.addEventListener('click', () => {
+      chatImageInput.click();
+      const attachmentMenu = document.getElementById('attachmentMenu');
+      if (attachmentMenu) attachmentMenu.classList.add('hidden');
+    });
+  }
+
+  const attachmentMenuBtn = document.getElementById('attachmentMenuBtn');
+  if (attachmentMenuBtn) {
+    attachmentMenuBtn.addEventListener('click', () => {
+      const attachmentMenu = document.getElementById('attachmentMenu');
+      if (attachmentMenu) attachmentMenu.classList.toggle('hidden');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      const attachmentMenu = document.getElementById('attachmentMenu');
+      if (attachmentMenu && !attachmentMenu.classList.contains('hidden') && !e.target.closest('.chat-attachment-dropdown')) {
+        attachmentMenu.classList.add('hidden');
+      }
+    });
   }
 
   if (chatImageInput) {
