@@ -1,4 +1,4 @@
-﻿const locationIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M12 21s7-5.1 7-11a7 7 0 0 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>';
+const locationIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M12 21s7-5.1 7-11a7 7 0 0 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>';
 const sections = {
   available: document.getElementById('availableSection'),
   active: document.getElementById('activeSection')
@@ -8,6 +8,7 @@ let electricianProfile = null;
 let pendingJobs = [];
 let activeJobs = [];
 let activeTab = 'available';
+let selectedCity = '';
 
 document.addEventListener('DOMContentLoaded', initElectricianDashboard);
 
@@ -42,6 +43,15 @@ function bindEvents() {
   Array.from(document.querySelectorAll('.tab-button')).forEach((button) => {
     button.addEventListener('click', () => setActiveTab(button.dataset.tab));
   });
+
+  const cityFilter = document.getElementById('cityFilter');
+  if (cityFilter) {
+    cityFilter.addEventListener('change', (e) => {
+      selectedCity = e.target.value;
+      renderAvailableJobs();
+      renderActiveJobs();
+    });
+  }
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -148,12 +158,17 @@ async function loadActiveJobs() {
 function renderAvailableJobs() {
   const grid = document.getElementById('availableJobsGrid');
 
-  if (!pendingJobs.length) {
-    grid.innerHTML = emptyState('No available jobs right now', 'Pending and AI-matched jobs will appear here.', 'jobs');
+  const filteredJobs = selectedCity
+    ? pendingJobs.filter((job) => normalizeCityName(job.city) === normalizeCityName(selectedCity))
+    : pendingJobs;
+
+  if (!filteredJobs.length) {
+    const msg = selectedCity ? 'No available jobs in ' + selectedCity : 'No available jobs right now';
+    grid.innerHTML = emptyState(msg, 'Pending and AI-matched jobs will appear here.', 'jobs');
     return;
   }
 
-  grid.innerHTML = pendingJobs.map((job) => availableJobCardHtml(job)).join('');
+  grid.innerHTML = filteredJobs.map((job) => availableJobCardHtml(job)).join('');
 
   grid.querySelectorAll('[data-action="details"]').forEach((button) => {
     button.addEventListener('click', () => openJobDetailsModal(findPendingJob(button.dataset.id)));
@@ -163,12 +178,17 @@ function renderAvailableJobs() {
 function renderActiveJobs() {
   const list = document.getElementById('activeJobsList');
 
-  if (!activeJobs.length) {
-    list.innerHTML = emptyState('No active jobs yet', 'Accepted jobs will appear here.', 'jobs');
+  const filteredJobs = selectedCity
+    ? activeJobs.filter((job) => normalizeCityName(job.city) === normalizeCityName(selectedCity))
+    : activeJobs;
+
+  if (!filteredJobs.length) {
+    const msg = selectedCity ? 'No active jobs in ' + selectedCity : 'No active jobs yet';
+    list.innerHTML = emptyState(msg, 'Accepted jobs will appear here.', 'jobs');
     return;
   }
 
-  list.innerHTML = activeJobs.map((job) => activeJobCardHtml(job)).join('');
+  list.innerHTML = filteredJobs.map((job) => activeJobCardHtml(job)).join('');
 
   list.querySelectorAll('[data-action="chat"]').forEach((button) => {
     button.addEventListener('click', () => {
